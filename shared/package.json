@@ -1,0 +1,23 @@
+{
+  "name": "@anime-con/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared data contracts (Event + Place Zod schemas, types, GeoJSON helpers)",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

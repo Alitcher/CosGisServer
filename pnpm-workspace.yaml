@@ -1,0 +1,5 @@
+packages:
+  - shared
+  - events-service
+  - places-service
+  - gis-proxy

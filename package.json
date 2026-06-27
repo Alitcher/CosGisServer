@@ -1,0 +1,14 @@
+{
+  "name": "cosplay-map-server",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Backend microservices for the Helsinki/Vantaa cosplay map (Cloudflare Workers + D1)",
+  "packageManager": "pnpm@10.4.1",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
