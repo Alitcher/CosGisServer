@@ -21,15 +21,25 @@ published — this repo is the source of truth for it.
 Cloudflare Workers · D1 (SQLite) · Hono · Wrangler · TypeScript · Zod 4
 
 ## Run
+
 ```bash
 pnpm install
-pnpm -r typecheck
 
-# each service runs on its own port
-cd events-service && npx wrangler dev    # → http://localhost:8787
-cd places-service && npx wrangler dev    # → http://localhost:8788
-cd gis-proxy     && npx wrangler dev     # → http://localhost:8789
+# one-time: create + seed the local D1 databases
+cp events-service/.dev.vars.example events-service/.dev.vars
+cp places-service/.dev.vars.example places-service/.dev.vars
+pnpm migrate
+
+# start ALL three Workers at once (Ctrl+C stops them all)
+pnpm dev
 ```
+
+This boots:
+- events-service → http://localhost:8787
+- places-service → http://localhost:8788
+- gis-proxy      → http://localhost:8789
+
+To run a single service instead: `cd <service> && pnpm dev`.
 
 ## Layout
 ```
@@ -47,7 +57,7 @@ cosplay-map-server/
 
 ## Status
 - [x] `shared/` contract (Event + Place schemas, types, GeoJSON helpers)
-- [ ] `events-service` Worker + D1
-- [ ] `places-service` Worker + D1
-- [ ] `gis-proxy` Worker
+- [x] `events-service` Worker + D1 (CRUD + public read + submissions + admin auth)
+- [x] `places-service` Worker + D1 (CRUD + public read + submissions + admin auth)
+- [x] `gis-proxy` Worker (cache + fallback)
 - [ ] Deploy to Cloudflare

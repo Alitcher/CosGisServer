@@ -1,0 +1,23 @@
+{
+  "name": "events-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:create": "wrangler d1 create anime-cons-db",
+    "db:migrate": "wrangler d1 migrations apply anime-cons-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply anime-cons-db --remote"
+  },
+  "dependencies": {
+    "@anime-con/shared": "workspace:*",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240000.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^4.0.0"
+  }
+}

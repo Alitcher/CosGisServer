@@ -5,10 +5,13 @@
   "description": "Backend microservices for the Helsinki/Vantaa cosplay map (Cloudflare Workers + D1)",
   "packageManager": "pnpm@10.4.1",
   "scripts": {
+    "dev": "concurrently -k -n events,places,gis -c magenta,cyan,yellow \"pnpm --filter events-service exec wrangler dev --port 8787\" \"pnpm --filter places-service exec wrangler dev --port 8788\" \"pnpm --filter gis-proxy exec wrangler dev --port 8789\"",
+    "migrate": "pnpm --filter events-service db:migrate && pnpm --filter places-service db:migrate",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build"
   },
   "devDependencies": {
+    "concurrently": "^9.1.0",
     "typescript": "^5.5.0"
   }
 }

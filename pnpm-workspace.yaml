@@ -3,3 +3,9 @@ packages:
   - events-service
   - places-service
   - gis-proxy
+
+# Allow these dependencies to run their install scripts (needed by wrangler).
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+  - sharp
