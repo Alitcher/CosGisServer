@@ -13,4 +13,16 @@ VALUES
   ('a3333333-3333-4333-8333-333333333333', 'Studio Hikari', 'studio', 'Vantaa', 'Tikkurila, Vantaa', 25.0432, 60.2925,
    '["chroma key","fantasy sets","studio lighting"]',
    '[{"url":"https://picsum.photos/seed/hikari/600/400","caption":"Studio set"}]',
-   'Bookable photo studio with cosplay-friendly sets and lighting.', 'By appointment', 'live');
+   'Bookable photo studio with cosplay-friendly sets and lighting.', 'By appointment', 'live'),
+  ('a4444444-4444-4444-8444-444444444444', 'Kamppi Center', 'mall', 'Helsinki', 'Urho Kekkosen katu 1, Helsinki', 24.9316, 60.1686,
+   '["modern","indoor backdrops"]',
+   '[{"url":"https://picsum.photos/seed/kamppi/600/400","caption":"Atrium"}]',
+   'Spacious indoor mall with bright atriums and friendly staff.', '08:00-22:00', 'live'),
+  ('a5555555-5555-4555-8555-555555555555', 'Töölönlahti Park', 'outdoor', 'Helsinki', 'Töölönlahti, Helsinki', 24.9356, 60.1798,
+   '["nature","lakeside","spring blossoms"]',
+   '[{"url":"https://picsum.photos/seed/toolo/600/400","caption":"Lakeside path"}]',
+   'Scenic lakeside park popular for outdoor cosplay shoots.', 'Always open', 'live'),
+  ('a6666666-6666-4666-8666-666666666666', 'Maid Café Mochi', 'cafe', 'Espoo', 'Leppävaara, Espoo', 24.8138, 60.2192,
+   '["maid cafe","kawaii","tea party"]',
+   '[{"url":"https://picsum.photos/seed/mochi/600/400","caption":"Maid café"}]',
+   'Themed maid café that loves hosting cosplayers and events.', '12:00-19:00', 'live');

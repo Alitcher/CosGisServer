@@ -11,6 +11,12 @@ database_id = "PLACEHOLDER_RUN_pnpm_db_create"
 [observability]
 enabled = true
 
+# Browser origins allowed to call this API (comma-separated). Empty = allow any
+# (fine for local dev). In production set this to your site, e.g.:
+#   ALLOWED_ORIGINS = "https://cosplaymap.fi,https://www.cosplaymap.fi"
+[vars]
+ALLOWED_ORIGINS = ""
+
 # ADMIN_TOKEN is a secret, not a var:
 #   local:  put it in .dev.vars
 #   remote: npx wrangler secret put ADMIN_TOKEN

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@anime-con/shared": "workspace:*",
+    "@simplewebauthn/server": "^13.3.2",
     "hono": "^4.6.0"
   },
   "devDependencies": {

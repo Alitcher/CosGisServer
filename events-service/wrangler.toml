@@ -11,6 +11,17 @@ database_id = "PLACEHOLDER_RUN_pnpm_db_create"
 [observability]
 enabled = true
 
+# Browser origins allowed to call this API (comma-separated). Empty = allow any
+# (fine for local dev). In production set this to your site, e.g.:
+#   ALLOWED_ORIGINS = "https://cosplaymap.fi,https://www.cosplaymap.fi"
+[vars]
+ALLOWED_ORIGINS = ""
+
+# Auto-import Helsinki Linked Events once a day (04:15 UTC). The sync's own
+# freshness guard means an extra run is cheap - it no-ops if already up to date.
+[triggers]
+crons = ["15 4 * * *"]
+
 # ADMIN_TOKEN is a secret, not a var:
 #   local:  put it in .dev.vars
 #   remote: npx wrangler secret put ADMIN_TOKEN
