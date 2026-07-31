@@ -1,0 +1,4 @@
+# Copy to `.dev.vars` for local development (it is gitignored).
+ADMIN_TOKEN=dev-secret-change-me
+# Optional: dedicated HMAC secret for passkey session tokens (falls back to ADMIN_TOKEN).
+# SESSION_SECRET=another-dev-secret

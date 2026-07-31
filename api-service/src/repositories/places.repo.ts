@@ -3,9 +3,9 @@ import type { Place } from "@anime-con/shared";
 /**
  * Data-access seam for places.
  *
- * Routes depend on `PlacesRepo`, never on SQL. To swap the database later, write
- * one new implementation and change the constructor in `index.ts`. The JSON-ness
- * of `themes`/`photos` (a SQLite detail) is hidden here, not in the routes.
+ * Services depend on `PlacesRepo`, never on SQL. To swap the database later, write
+ * one new implementation and change the constructor. The JSON-ness of
+ * `themes`/`photos` (a SQLite detail) is hidden here, not in the services.
  */
 export type PlaceInput = {
   name: string;
