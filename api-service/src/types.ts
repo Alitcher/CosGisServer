@@ -13,4 +13,6 @@ export type Bindings = {
   RP_ID?: string;           // WebAuthn relying-party id (domain), default "localhost"
   RP_NAME?: string;         // user-visible name, default "CosplayMap Admin"
   RP_ORIGIN?: string;       // expected site origin, default "http://localhost:3000"
+  SUBMISSIONS_PER_DEVICE_PER_DAY?: string; // public submission quota per device, default 5
+  SUBMISSIONS_PER_IP_PER_DAY?: string;     // backstop quota per IP, default 20
 };

@@ -8,6 +8,7 @@ import {
 } from "@anime-con/shared";
 import type { Bindings } from "../types";
 import { requireAdmin } from "../middleware/auth";
+import { submissionQuota } from "../middleware/rate-limit";
 import { d1PlacesRepo } from "../repositories/places.repo";
 import { placesService } from "../services/places.service";
 
@@ -28,7 +29,7 @@ export function placesController() {
   });
 
   // ---------- community submissions (static, before /:id) ----------
-  routes.post("/v1/places/submissions", async (c) => {
+  routes.post("/v1/places/submissions", submissionQuota, async (c) => {
     const parsed = PlaceSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
     const place = await svc(c).submit(parsed.data);

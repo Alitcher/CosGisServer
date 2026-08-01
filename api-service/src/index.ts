@@ -6,6 +6,7 @@ import { placesController } from "./controllers/places.controller";
 import { adminController } from "./controllers/admin.controller";
 import { d1EventsRepo } from "./repositories/events.repo";
 import { syncLinkedEvents } from "./services/linkedevents";
+import { purgeOldQuota } from "./middleware/rate-limit";
 
 /**
  * The merged API service: events + places + admin auth in ONE Cloudflare Worker
@@ -50,8 +51,10 @@ app.route("/", adminController());
 export default {
   fetch: app.fetch,
   // Cron Trigger (see wrangler.toml). Auto-imports Helsinki Linked Events; the
-  // sync's own freshness guard still prevents redundant downloads.
+  // sync's own freshness guard still prevents redundant downloads. It also
+  // sweeps yesterday's submission-quota counters.
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
     ctx.waitUntil(syncLinkedEvents(d1EventsRepo(env.DB), env.DB).then(() => undefined));
+    ctx.waitUntil(purgeOldQuota(env.DB));
   },
 };

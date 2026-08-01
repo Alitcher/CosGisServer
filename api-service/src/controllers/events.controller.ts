@@ -8,6 +8,7 @@ import {
 } from "@anime-con/shared";
 import type { Bindings } from "../types";
 import { requireAdmin } from "../middleware/auth";
+import { submissionQuota } from "../middleware/rate-limit";
 import { d1EventsRepo } from "../repositories/events.repo";
 import { eventsService } from "../services/events.service";
 import { syncLinkedEvents } from "../services/linkedevents";
@@ -34,7 +35,7 @@ export function eventsController() {
   });
 
   // ---------- community submissions (static, before /:id) ----------
-  routes.post("/v1/events/submissions", async (c) => {
+  routes.post("/v1/events/submissions", submissionQuota, async (c) => {
     const parsed = EventSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
     const event = await svc(c).submit(parsed.data);
