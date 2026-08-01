@@ -5,12 +5,17 @@ independently deployable **Cloudflare Workers** microservices. The frontend live
 in a **separate repo** (`cosplay-map-client`) and talks to these services over HTTP.
 
 ## Services
-| Folder            | Job                                                  | State        |
-|-------------------|------------------------------------------------------|--------------|
-| `shared/`         | Shared TS types + Zod schemas (Event + Place)        | none (lib)   |
-| `events-service/` | Anime conventions: CRUD + public read API + queue    | D1 (SQLite)  |
-| `places-service/` | Cosplay-friendly places (photos + themes): CRUD + API| D1 (SQLite)  |
-| `gis-proxy/`      | Proxy + cache venue geometry from hel.kartta.fi      | none         |
+| Folder          | Job                                                          | State        |
+|-----------------|--------------------------------------------------------------|--------------|
+| `shared/`       | Shared TS types + Zod schemas (Event + Place)                | none (lib)   |
+| `api-service/`  | Events **and** places: CRUD + public read + submissions + admin auth | D1 (SQLite)  |
+| `gis-proxy/`    | Proxy + cache venue geometry from hel.kartta.fi              | none         |
+
+> **Merged:** events and places were two Workers (`events-service`,
+> `places-service`) that duplicated the admin gate, CORS, and session-token code.
+> Following a code review they're now one `api-service` (layered
+> controllers → services → repositories) sharing a single D1 database. `gis-proxy`
+> stays separate — it's a stateless cache with its own failure mode.
 
 `shared/` is an **internal** workspace package (`@anime-con/shared`) used only by
 these services to validate writes. The client keeps its own lightweight types
@@ -25,19 +30,17 @@ Cloudflare Workers · D1 (SQLite) · Hono · Wrangler · TypeScript · Zod 4
 ```bash
 pnpm install
 
-# one-time: create + seed the local D1 databases
-cp events-service/.dev.vars.example events-service/.dev.vars
-cp places-service/.dev.vars.example places-service/.dev.vars
+# one-time: create + seed the local D1 database
+cp api-service/.dev.vars.example api-service/.dev.vars
 pnpm migrate
 
-# start ALL three Workers at once (Ctrl+C stops them all)
+# start both Workers at once (Ctrl+C stops them all)
 pnpm dev
 ```
 
 This boots:
-- events-service → http://localhost:8787
-- places-service → http://localhost:8788
-- gis-proxy      → http://localhost:8789
+- api-service → http://localhost:8787   (events + places + admin)
+- gis-proxy   → http://localhost:8789
 
 To run a single service instead: `cd <service> && pnpm dev`.
 
@@ -46,10 +49,9 @@ To run a single service instead: `cd <service> && pnpm dev`.
 cosplay-map-server/
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── shared/            @anime-con/shared — Event + Place Zod contract
-├── events-service/    Worker + D1
-├── places-service/    Worker + D1
-└── gis-proxy/         Worker (cache only)
+├── shared/          @anime-con/shared — Event + Place Zod contract
+├── api-service/     Worker + D1 (events + places + admin auth)
+└── gis-proxy/       Worker (cache only)
 ```
 
 > ⚠️ D1 is SQLite (no PostGIS) — geometry is plain `lng`/`lat` columns, queried
@@ -57,7 +59,6 @@ cosplay-map-server/
 
 ## Status
 - [x] `shared/` contract (Event + Place schemas, types, GeoJSON helpers)
-- [x] `events-service` Worker + D1 (CRUD + public read + submissions + admin auth)
-- [x] `places-service` Worker + D1 (CRUD + public read + submissions + admin auth)
+- [x] `api-service` Worker + D1 (events + places CRUD + public read + submissions + admin auth)
 - [x] `gis-proxy` Worker (cache + fallback)
 - [ ] Deploy to Cloudflare

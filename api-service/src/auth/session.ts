@@ -1,8 +1,10 @@
 /**
  * Tiny stateless admin session token: `payloadHex.sigHex`, signed with HMAC-SHA256.
- * Issued after a successful passkey (WebAuthn) login and accepted by `requireAdmin`
- * in place of the static ADMIN_TOKEN. Both services verify it with the same secret,
- * so a token minted by events-service also unlocks places-service.
+ * Minted after a successful passkey (WebAuthn) login and accepted by `requireAdmin`
+ * in place of the static ADMIN_TOKEN.
+ *
+ * Before the merge this lived in TWO copies (events-service minted + verified,
+ * places-service only verified). Now there is a single implementation.
  */
 const enc = new TextEncoder();
 

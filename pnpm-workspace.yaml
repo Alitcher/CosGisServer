@@ -1,7 +1,6 @@
 packages:
   - shared
-  - events-service
-  - places-service
+  - api-service
   - gis-proxy
 
 # Allow these dependencies to run their install scripts (needed by wrangler).

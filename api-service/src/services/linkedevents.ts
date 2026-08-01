@@ -2,7 +2,7 @@
  * Helsinki **Linked Events** import (https://api.hel.fi/linkedevents/v1/).
  *
  * Pulls cosplay/manga community events into our *pending* queue so an admin
- * approves the real ones (existing `POST /v1/submissions/:id/approve` flow).
+ * approves the real ones (existing `POST /v1/events/submissions/:id/approve`).
  *
  * Three guards keep us from re-downloading needlessly:
  *   1. Freshness  - skip the whole run if we synced < TTL ago (unless forced).
@@ -11,7 +11,7 @@
  *
  * Data is CC BY 4.0 - attribute "City of Helsinki, CC BY 4.0" where shown.
  */
-import type { EventsRepo, EventInput } from "./repo";
+import type { EventsRepo, EventInput } from "../repositories/events.repo";
 
 const BASE = "https://api.hel.fi/linkedevents/v1/event/";
 // High-signal keywords only. `anime` alone is noisy (museum exhibits); skip it.

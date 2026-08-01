@@ -1,11 +1,11 @@
 /**
- * Passkey (WebAuthn) admin login for events-service - the auth host.
+ * Passkey (WebAuthn) admin login. Lives in the merged API service now, but the
+ * flow is unchanged from the old events-service:
  *
- * Flow:
  *   register/options + register/verify  -> store a credential (one-time, bootstrap
  *                                          authorized by the static ADMIN_TOKEN)
  *   login/options + login/verify        -> prove possession of the credential, after
- *                                          which index.ts mints a session token
+ *                                          which the admin controller mints a session token
  *
  * On Windows with no fingerprint reader this uses the Windows Hello PIN, backed by
  * the computer's TPM. The private key never leaves the device.
@@ -98,7 +98,7 @@ async function getCredential(db: D1Database, id: string): Promise<StoredCred | n
   };
 }
 
-// ---------- public operations used by index.ts routes ----------
+// ---------- public operations used by the admin controller ----------
 export async function beginRegistration(env: { DB: D1Database } & Parameters<typeof rpConfig>[0], db: D1Database) {
   const { rpID, rpName } = rpConfig(env);
   const existing = await listCredentials(db);

@@ -1,11 +1,12 @@
-name = "events-service"
+name = "api-service"
 main = "src/index.ts"
 compatibility_date = "2024-11-01"
 
-# Create the DB with `pnpm db:create`, then paste the printed database_id here.
+# One database for the whole API (events + places + admin auth). Create it with
+# `pnpm db:create`, then paste the printed database_id here.
 [[d1_databases]]
 binding = "DB"
-database_name = "anime-cons-db"
+database_name = "cosplay-map-db"
 database_id = "PLACEHOLDER_RUN_pnpm_db_create"
 
 [observability]
@@ -22,6 +23,8 @@ ALLOWED_ORIGINS = ""
 [triggers]
 crons = ["15 4 * * *"]
 
-# ADMIN_TOKEN is a secret, not a var:
-#   local:  put it in .dev.vars
-#   remote: npx wrangler secret put ADMIN_TOKEN
+# Secrets (NOT vars):
+#   local:  put them in .dev.vars
+#   remote: npx wrangler secret put ADMIN_TOKEN   (and SESSION_SECRET)
+# WebAuthn relying-party config (RP_ID, RP_NAME, RP_ORIGIN) may be set as [vars]
+# in production; localhost defaults apply when unset.

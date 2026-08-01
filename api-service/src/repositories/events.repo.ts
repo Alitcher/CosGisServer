@@ -3,10 +3,10 @@ import type { Event } from "@anime-con/shared";
 /**
  * Data-access seam for events.
  *
- * Route handlers depend on `EventsRepo` (an interface), never on SQL. To swap the
+ * Services depend on `EventsRepo` (an interface), never on SQL. To swap the
  * database later (MongoDB, Postgres, ...), write ONE new implementation of this
- * interface and change where the repo is constructed in `index.ts`. No route,
- * validation, or response code changes - the API contract stays identical.
+ * interface and change where the repo is constructed. No service, validation, or
+ * response code changes - the API contract stays identical.
  */
 export type EventInput = {
   name: string;
