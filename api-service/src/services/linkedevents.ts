@@ -26,7 +26,9 @@ type RawEvent = {
   name?: Localized;
   short_description?: Localized;
   description?: Localized;
+  info_url?: Localized;
   start_time?: string | null;
+  end_time?: string | null;
   last_modified_time?: string | null;
   location?: {
     name?: Localized;
@@ -49,14 +51,20 @@ export function mapToEventInput(e: RawEvent): (EventInput & { source: string; so
   if (!CITIES.has(city as string)) return null;
 
   const description = stripHtml(pick(e.short_description) || pick(e.description) || null);
+  const infoUrl = pick(e.info_url);
+  const url = infoUrl && /^https?:\/\//i.test(infoUrl) ? infoUrl.slice(0, 500) : undefined;
   return {
     name: name.slice(0, 120),
     venue: (pick(loc.name) || "Unknown venue").slice(0, 120),
     city: city as EventInput["city"],
     date: e.start_time.slice(0, 10), // YYYY-MM-DD
+    ...(e.end_time && e.end_time.slice(0, 10) > e.start_time.slice(0, 10)
+      ? { endDate: e.end_time.slice(0, 10) }
+      : {}),
     lng: coords[0],
     lat: coords[1],
     ...(description ? { description: description.slice(0, 500) } : {}),
+    ...(url ? { url } : {}),
     status: "pending",
     submittedBy: "linkedevents:helsinki",
     source: "linkedevents",
@@ -141,7 +149,13 @@ export async function syncLinkedEvents(
       continue;
     }
     // Guard 3: dedup against the DB - skip if we already imported this id.
-    if (await repo.findBySourceId(input.source, input.sourceId)) {
+    const existing = await repo.findBySourceId(input.source, input.sourceId);
+    if (existing) {
+      // Backfill fields onto rows imported before we captured them (url, end date).
+      const patch: Partial<EventInput> = {};
+      if (!existing.url && input.url) patch.url = input.url;
+      if (!existing.endDate && input.endDate) patch.endDate = input.endDate;
+      if (Object.keys(patch).length) await repo.update(existing.id, patch);
       duplicates++;
       continue;
     }

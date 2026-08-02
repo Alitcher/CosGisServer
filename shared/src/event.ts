@@ -7,10 +7,12 @@ export const EventSchema = z.object({
   name: z.string().min(1).max(120),
   venue: z.string().min(1).max(120),
   city: CityEnum,
-  date: IsoDate,
+  date: IsoDate,           // start date (single-day events use only this)
+  endDate: IsoDate.optional(), // last day, for multi-day events (>= date)
   lng: Longitude,
   lat: Latitude,
   description: z.string().max(500).optional(),
+  url: z.url().max(500).optional(),   // organizer / event-info page (e.g. Linked Events info_url)
   status: StatusEnum.default('draft'),
   createdAt: z.string().optional(),
 });

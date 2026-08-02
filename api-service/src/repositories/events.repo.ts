@@ -13,9 +13,11 @@ export type EventInput = {
   venue: string;
   city: Event["city"];
   date: string;
+  endDate?: string;
   lng: number;
   lat: number;
   description?: string;
+  url?: string;       // link to the event's info page
   status?: Event["status"];
   submittedBy?: string;
   source?: string;    // provenance for imported events, e.g. 'linkedevents'
@@ -39,9 +41,11 @@ function rowToEvent(r: Record<string, unknown>): Event {
     venue: String(r.venue),
     city: r.city as Event["city"],
     date: String(r.date),
+    endDate: r.end_date == null ? undefined : String(r.end_date),
     lng: Number(r.lng),
     lat: Number(r.lat),
     description: r.description == null ? undefined : String(r.description),
+    url: r.url == null ? undefined : String(r.url),
     status: r.status as Event["status"],
     createdAt: r.created_at == null ? undefined : String(r.created_at),
   };
@@ -49,8 +53,8 @@ function rowToEvent(r: Record<string, unknown>): Event {
 
 // updatable field -> column
 const COLUMNS: Array<[keyof EventInput, string]> = [
-  ["name", "name"], ["venue", "venue"], ["city", "city"], ["date", "date"],
-  ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["status", "status"],
+  ["name", "name"], ["venue", "venue"], ["city", "city"], ["date", "date"], ["endDate", "end_date"],
+  ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["status", "status"],
 ];
 
 /** D1 (SQLite) implementation of EventsRepo. */
@@ -77,11 +81,11 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,date,lng,lat,description,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,date,end_date,lng,lat,description,url,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
-          id, input.name, input.venue, input.city, input.date, input.lng, input.lat,
-          input.description ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          id, input.name, input.venue, input.city, input.date, input.endDate ?? null, input.lng, input.lat,
+          input.description ?? null, input.url ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
         )
         .run();
