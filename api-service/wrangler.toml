@@ -7,7 +7,7 @@ compatibility_date = "2024-11-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "cosplay-map-db"
-database_id = "PLACEHOLDER_RUN_pnpm_db_create"
+database_id = "026fca28-7112-4361-bfed-0bee0e80d899"
 
 [observability]
 enabled = true
@@ -17,6 +17,12 @@ enabled = true
 #   ALLOWED_ORIGINS = "https://cosplaymap.fi,https://www.cosplaymap.fi"
 [vars]
 ALLOWED_ORIGINS = ""
+
+# Public submission quota (per local day, Europe/Helsinki). The per-device limit
+# keys off the client's X-Device-Id header; the per-IP limit is the backstop for
+# clients that rotate that id. Both are strings - Workers vars always are.
+SUBMISSIONS_PER_DEVICE_PER_DAY = "5"
+SUBMISSIONS_PER_IP_PER_DAY = "20"
 
 # Auto-import Helsinki Linked Events once a day (04:15 UTC). The sync's own
 # freshness guard means an extra run is cheap - it no-ops if already up to date.
