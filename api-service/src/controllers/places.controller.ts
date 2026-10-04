@@ -4,6 +4,7 @@ import {
   UpdatePlaceSchema,
   PlaceSubmissionSchema,
   StatusEnum,
+  PurposeEnum,
   placesToFeatureCollection,
 } from "@anime-con/shared";
 import type { Bindings } from "../types";
@@ -46,11 +47,16 @@ export function placesController() {
   });
 
   // ---------- list + create ----------
+  // `?purpose=photo|practice` narrows to the Spots or Practice tab's places.
   routes.get("/v1/places", async (c) => {
+    const rawPurpose = c.req.query("purpose");
+    const purpose = rawPurpose ? PurposeEnum.safeParse(rawPurpose) : null;
+    if (purpose && !purpose.success) return c.json({ error: "purpose must be 'photo' or 'practice'" }, 400);
     return c.json(
       await svc(c).listLive({
         type: c.req.query("type") || undefined,
         city: c.req.query("city") || undefined,
+        purpose: purpose?.data,
       }),
     );
   });

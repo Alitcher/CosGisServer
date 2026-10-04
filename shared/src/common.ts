@@ -28,6 +28,12 @@ export const LocalTime = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected time as HH:MM');
 
+/**
+ * A web link that is safe to render as `href`. Plain `z.url()` also accepts
+ * `javascript:` and `data:` URLs, which would run script when clicked.
+ */
+export const HttpUrl = z.url({ protocol: /^https?$/ });
+
 /** Geographic coordinate bounds (WGS84). Stored as plain numbers — D1 has no PostGIS. */
 export const Longitude = z.number().min(-180).max(180);
 export const Latitude = z.number().min(-90).max(90);

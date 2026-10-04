@@ -18,12 +18,19 @@ export type PlaceInput = {
   photos: Place["photos"];
   description?: string;
   openingHours?: string;
+  booking?: Place["booking"];
+  price?: Place["price"];
+  priceNote?: string;
+  facilities?: Place["facilities"];
+  youthFriendly?: boolean;
+  bookingUrl?: string;
   status?: Place["status"];
   submittedBy?: string;
 };
 
 export interface PlacesRepo {
-  list(filter?: { status?: string; type?: string; city?: string }): Promise<Place[]>;
+  /** `types` matches any of the listed types (e.g. every practice type). */
+  list(filter?: { status?: string; type?: string; types?: string[]; city?: string }): Promise<Place[]>;
   get(id: string): Promise<Place | null>;
   create(input: PlaceInput): Promise<Place>;
   update(id: string, patch: Partial<PlaceInput>): Promise<Place | null>;
@@ -43,13 +50,19 @@ function rowToPlace(r: Record<string, unknown>): Place {
     photos: JSON.parse(String(r.photos ?? "[]")) as Place["photos"],
     description: r.description == null ? undefined : String(r.description),
     openingHours: r.opening_hours == null ? undefined : String(r.opening_hours),
+    booking: r.booking == null ? undefined : (r.booking as Place["booking"]),
+    price: r.price == null ? undefined : (r.price as Place["price"]),
+    priceNote: r.price_note == null ? undefined : String(r.price_note),
+    facilities: JSON.parse(String(r.facilities ?? "[]")) as Place["facilities"],
+    youthFriendly: r.youth_friendly == null ? undefined : Number(r.youth_friendly) === 1,
+    bookingUrl: r.booking_url == null ? undefined : String(r.booking_url),
     status: r.status as Place["status"],
     createdAt: r.created_at == null ? undefined : String(r.created_at),
   };
 }
 
-// updatable field -> { column, stored as JSON? }
-const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean }> = [
+// updatable field -> { column, stored as JSON? stored as 0/1? }
+const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean; bool?: boolean }> = [
   { key: "name", col: "name" },
   { key: "type", col: "type" },
   { key: "city", col: "city" },
@@ -60,6 +73,12 @@ const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean }> = [
   { key: "photos", col: "photos", json: true },
   { key: "description", col: "description" },
   { key: "openingHours", col: "opening_hours" },
+  { key: "booking", col: "booking" },
+  { key: "price", col: "price" },
+  { key: "priceNote", col: "price_note" },
+  { key: "facilities", col: "facilities", json: true },
+  { key: "youthFriendly", col: "youth_friendly", bool: true },
+  { key: "bookingUrl", col: "booking_url" },
   { key: "status", col: "status" },
 ];
 
@@ -78,6 +97,12 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const binds: unknown[] = [];
       if (filter?.status) { where.push("status = ?"); binds.push(filter.status); }
       if (filter?.type) { where.push("type = ?"); binds.push(filter.type); }
+      if (filter?.types) {
+        // An empty list matches nothing (and `IN ()` is a syntax error in SQLite).
+        if (filter.types.length === 0) return [];
+        where.push(`type IN (${filter.types.map(() => "?").join(", ")})`);
+        binds.push(...filter.types);
+      }
       if (filter?.city) { where.push("city = ?"); binds.push(filter.city); }
       const sql = `SELECT * FROM places ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY name`;
       const { results } = await db.prepare(sql).bind(...binds).all();
@@ -88,12 +113,17 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO places (id,name,type,city,address,lng,lat,themes,photos,description,opening_hours,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO places (id,name,type,city,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.type, input.city, input.address ?? null, input.lng, input.lat,
           JSON.stringify(input.themes ?? []), JSON.stringify(input.photos ?? []),
-          input.description ?? null, input.openingHours ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          input.description ?? null, input.openingHours ?? null,
+          input.booking ?? null, input.price ?? null, input.priceNote ?? null,
+          JSON.stringify(input.facilities ?? []),
+          input.youthFriendly == null ? null : input.youthFriendly ? 1 : 0,
+          input.bookingUrl ?? null,
+          input.status ?? "draft", input.submittedBy ?? null,
         )
         .run();
       return (await get(id)) as Place;
@@ -104,7 +134,7 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const vals: unknown[] = [];
       for (const f of FIELDS) {
         const v = patch[f.key];
-        if (v !== undefined) { sets.push(`${f.col} = ?`); vals.push(f.json ? JSON.stringify(v) : v); }
+        if (v !== undefined) { sets.push(`${f.col} = ?`); vals.push(f.json ? JSON.stringify(v) : f.bool ? (v ? 1 : 0) : v); }
       }
       if (sets.length > 0) {
         vals.push(id);

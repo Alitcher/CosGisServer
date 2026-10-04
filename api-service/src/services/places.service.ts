@@ -1,17 +1,20 @@
-import type { Place } from "@anime-con/shared";
+import { typesFor, type Place, type Purpose } from "@anime-con/shared";
 import type { PlacesRepo, PlaceInput } from "../repositories/places.repo";
 
 /**
  * Places business logic. Same shape as the events service on purpose - the two
  * entities share a status/submission/approval workflow, which is exactly why
- * they now live in one service instead of two. Places just add type/city
+ * they now live in one service instead of two. Places just add type/city/purpose
  * filtering on the public list.
  */
 export function placesService(repo: PlacesRepo) {
   return {
-    /** Public read: only live places, optionally filtered by type and/or city. */
-    listLive: (filter?: { type?: string; city?: string }): Promise<Place[]> =>
-      repo.list({ status: "live", ...filter }),
+    /**
+     * Public read: only live places, optionally filtered by type, city and/or
+     * purpose (`photo` = Spots tab, `practice` = Practice tab).
+     */
+    listLive: ({ purpose, ...filter }: { type?: string; city?: string; purpose?: Purpose } = {}): Promise<Place[]> =>
+      repo.list({ status: "live", ...filter, types: purpose ? typesFor(purpose) : undefined }),
 
     /** Admin read: the community-submission queue awaiting approval. */
     listPending: (): Promise<Place[]> => repo.list({ status: "pending" }),
