@@ -25,6 +25,7 @@
  */
 import type { EventsRepo, EventInput } from "../repositories/events.repo";
 import type { City } from "@anime-con/shared";
+import { localDate, localTime } from "./helsinki-time";
 
 const FEED = "https://kompassi.eu/api/v1/listings/conit.fi";
 const FRESH_TTL_MS = 12 * 60 * 60 * 1000; // re-sync at most every 12h
@@ -100,18 +101,6 @@ function normalise(s: string): string {
     .trim();
 }
 
-/** YYYY-MM-DD in Helsinki local time. Slicing the UTC string is off by a day for
- *  anything starting late evening, which is exactly when cons run. */
-const dateFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Europe/Helsinki",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-});
-function localDate(iso: string): string | null {
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? dateFmt.format(new Date(t)) : null;
-}
 
 /** Look up a venue we already hold coordinates for. Cons repeat annually, so last
  *  year's approved row geolocates this year's edition. */
@@ -139,6 +128,8 @@ export function mapToEventInput(
   if (!date) return null;
 
   const endDate = e.end_time ? localDate(e.end_time) : null;
+  const startTime = localTime(e.start_time);
+  const endTime = e.end_time ? localTime(e.end_time) : null;
   const url =
     e.homepage_url && /^https?:\/\//i.test(e.homepage_url) ? e.homepage_url.slice(0, 500) : undefined;
   const description = e.headline?.replace(/\s+/g, " ").trim() || undefined;
@@ -149,6 +140,8 @@ export function mapToEventInput(
     city: geo.city,
     date,
     ...(endDate && endDate > date ? { endDate } : {}),
+    ...(startTime ? { startTime } : {}),
+    ...(endTime ? { endTime } : {}),
     lng: geo.lng,
     lat: geo.lat,
     ...(description ? { description: description.slice(0, 500) } : {}),
@@ -208,7 +201,7 @@ export async function syncConit(
   let ignored = 0;
   const unresolved = new Set<string>();
   const cancelled: string[] = [];
-  const today = dateFmt.format(new Date());
+  const today = localDate(new Date().toISOString()) as string;
 
   for (const e of raw) {
     if (!e.slug) {
@@ -257,6 +250,8 @@ export async function syncConit(
       if (!existing.url && input.url) patch.url = input.url;
       if (!existing.endDate && input.endDate) patch.endDate = input.endDate;
       if (!existing.description && input.description) patch.description = input.description;
+      if (!existing.startTime && input.startTime) patch.startTime = input.startTime;
+      if (!existing.endTime && input.endTime) patch.endTime = input.endTime;
       if (Object.keys(patch).length) await repo.update(existing.id, patch);
       duplicates++;
       continue;

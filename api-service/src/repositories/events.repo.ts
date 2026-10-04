@@ -18,6 +18,9 @@ export type EventInput = {
   lat: number;
   description?: string;
   url?: string;       // link to the event's info page
+  image?: string;     // thumbnail / logo URL
+  startTime?: string; // local 'HH:MM'
+  endTime?: string;   // local 'HH:MM'
   status?: Event["status"];
   submittedBy?: string;
   source?: string;    // provenance for imported events, e.g. 'linkedevents'
@@ -46,6 +49,9 @@ function rowToEvent(r: Record<string, unknown>): Event {
     lat: Number(r.lat),
     description: r.description == null ? undefined : String(r.description),
     url: r.url == null ? undefined : String(r.url),
+    image: r.image == null ? undefined : String(r.image),
+    startTime: r.start_time == null ? undefined : String(r.start_time),
+    endTime: r.end_time == null ? undefined : String(r.end_time),
     status: r.status as Event["status"],
     createdAt: r.created_at == null ? undefined : String(r.created_at),
   };
@@ -54,7 +60,8 @@ function rowToEvent(r: Record<string, unknown>): Event {
 // updatable field -> column
 const COLUMNS: Array<[keyof EventInput, string]> = [
   ["name", "name"], ["venue", "venue"], ["city", "city"], ["date", "date"], ["endDate", "end_date"],
-  ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["status", "status"],
+  ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
+  ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
 
 /** D1 (SQLite) implementation of EventsRepo. */
@@ -81,11 +88,12 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,date,end_date,lng,lat,description,url,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
-          id, input.name, input.venue, input.city, input.date, input.endDate ?? null, input.lng, input.lat,
-          input.description ?? null, input.url ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          id, input.name, input.venue, input.city, input.date, input.endDate ?? null,
+          input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
+          input.description ?? null, input.url ?? null, input.image ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
         )
         .run();

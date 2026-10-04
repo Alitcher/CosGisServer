@@ -12,6 +12,7 @@
  * Data is CC BY 4.0 - attribute "City of Helsinki, CC BY 4.0" where shown.
  */
 import type { EventsRepo, EventInput } from "../repositories/events.repo";
+import { localDate, localTime } from "./helsinki-time";
 
 const BASE = "https://api.hel.fi/linkedevents/v1/event/";
 // High-signal keywords only. `anime` alone is noisy (museum exhibits); skip it.
@@ -27,6 +28,7 @@ type RawEvent = {
   short_description?: Localized;
   description?: Localized;
   info_url?: Localized;
+  images?: Array<{ url?: string | null }> | null; // inline image objects, first = main picture
   start_time?: string | null;
   end_time?: string | null;
   last_modified_time?: string | null;
@@ -53,18 +55,27 @@ export function mapToEventInput(e: RawEvent): (EventInput & { source: string; so
   const description = stripHtml(pick(e.short_description) || pick(e.description) || null);
   const infoUrl = pick(e.info_url);
   const url = infoUrl && /^https?:\/\//i.test(infoUrl) ? infoUrl.slice(0, 500) : undefined;
+  const imageUrl = e.images?.[0]?.url;
+  const image = imageUrl && /^https?:\/\//i.test(imageUrl) && imageUrl.length <= 500 ? imageUrl : undefined;
+  // Times arrive in UTC; convert so the date doesn't slip a day late in the evening.
+  const date = localDate(e.start_time);
+  if (!date) return null;
+  const endDate = e.end_time ? localDate(e.end_time) : null;
+  const startTime = localTime(e.start_time);
+  const endTime = e.end_time ? localTime(e.end_time) : null;
   return {
     name: name.slice(0, 120),
     venue: (pick(loc.name) || "Unknown venue").slice(0, 120),
     city: city as EventInput["city"],
-    date: e.start_time.slice(0, 10), // YYYY-MM-DD
-    ...(e.end_time && e.end_time.slice(0, 10) > e.start_time.slice(0, 10)
-      ? { endDate: e.end_time.slice(0, 10) }
-      : {}),
+    date,
+    ...(endDate && endDate > date ? { endDate } : {}),
+    ...(startTime ? { startTime } : {}),
+    ...(endTime ? { endTime } : {}),
     lng: coords[0],
     lat: coords[1],
     ...(description ? { description: description.slice(0, 500) } : {}),
     ...(url ? { url } : {}),
+    ...(image ? { image } : {}),
     status: "pending",
     submittedBy: "linkedevents:helsinki",
     source: "linkedevents",
@@ -151,10 +162,13 @@ export async function syncLinkedEvents(
     // Guard 3: dedup against the DB - skip if we already imported this id.
     const existing = await repo.findBySourceId(input.source, input.sourceId);
     if (existing) {
-      // Backfill fields onto rows imported before we captured them (url, end date).
+      // Backfill fields onto rows imported before we captured them.
       const patch: Partial<EventInput> = {};
       if (!existing.url && input.url) patch.url = input.url;
       if (!existing.endDate && input.endDate) patch.endDate = input.endDate;
+      if (!existing.image && input.image) patch.image = input.image;
+      if (!existing.startTime && input.startTime) patch.startTime = input.startTime;
+      if (!existing.endTime && input.endTime) patch.endTime = input.endTime;
       if (Object.keys(patch).length) await repo.update(existing.id, patch);
       duplicates++;
       continue;

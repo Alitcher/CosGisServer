@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityEnum, StatusEnum, IsoDate, Longitude, Latitude } from './common';
+import { CityEnum, StatusEnum, IsoDate, LocalTime, Longitude, Latitude } from './common';
 
 /** A dated anime convention plotted on the map. */
 export const EventSchema = z.object({
@@ -13,6 +13,9 @@ export const EventSchema = z.object({
   lat: Latitude,
   description: z.string().max(500).optional(),
   url: z.url().max(500).optional(),   // organizer / event-info page (e.g. Linked Events info_url)
+  image: z.url().max(500).optional(), // thumbnail / logo shown on cards and map popups
+  startTime: LocalTime.optional(),    // doors open on `date`
+  endTime: LocalTime.optional(),      // closing time on `endDate` (or `date` if single-day)
   status: StatusEnum.default('draft'),
   createdAt: z.string().optional(),
 });

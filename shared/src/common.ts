@@ -23,6 +23,11 @@ export const IsoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected date as YYYY-MM-DD');
 
+/** Local (Europe/Helsinki) wall-clock time, 24h, e.g. "18:30". */
+export const LocalTime = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Expected time as HH:MM');
+
 /** Geographic coordinate bounds (WGS84). Stored as plain numbers — D1 has no PostGIS. */
 export const Longitude = z.number().min(-180).max(180);
 export const Latitude = z.number().min(-90).max(90);
