@@ -1,7 +1,17 @@
 import { z } from 'zod';
 
-/** Cities covered by the map. Extend as the project grows. */
-export const CityEnum = z.enum(['Helsinki', 'Vantaa', 'Espoo']);
+/**
+ * Cities covered by the map. Extend as the project grows.
+ *
+ * Widened past the capital region when the conit.fi import landed: Finnish cons
+ * are overwhelmingly held in Tampere, Lahti and Turku, so a capital-only enum
+ * rejected almost the entire feed. Names are ASCII (Jyvaskyla, not the accented
+ * form) to match the rest of the codebase.
+ */
+export const CityEnum = z.enum([
+  'Helsinki', 'Vantaa', 'Espoo',
+  'Tampere', 'Turku', 'Lahti', 'Oulu', 'Jyvaskyla', 'Kuopio',
+]);
 export type City = z.infer<typeof CityEnum>;
 
 /** Publish state shared by events and places. */

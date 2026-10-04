@@ -6,6 +6,7 @@ import { placesController } from "./controllers/places.controller";
 import { adminController } from "./controllers/admin.controller";
 import { d1EventsRepo } from "./repositories/events.repo";
 import { syncLinkedEvents } from "./services/linkedevents";
+import { syncConit } from "./services/conit";
 import { purgeOldQuota } from "./middleware/rate-limit";
 
 /**
@@ -50,11 +51,17 @@ app.route("/", adminController());
 
 export default {
   fetch: app.fetch,
-  // Cron Trigger (see wrangler.toml). Auto-imports Helsinki Linked Events; the
-  // sync's own freshness guard still prevents redundant downloads. It also
-  // sweeps yesterday's submission-quota counters.
+  // Cron Trigger (see wrangler.toml). Auto-imports Helsinki Linked Events and the
+  // nationwide conit.fi convention feed; each sync's own freshness guard still
+  // prevents redundant downloads. It also sweeps yesterday's submission-quota
+  // counters. A failing feed must not take the other one down with it, so each
+  // import is caught separately.
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(syncLinkedEvents(d1EventsRepo(env.DB), env.DB).then(() => undefined));
+    const repo = d1EventsRepo(env.DB);
+    ctx.waitUntil(
+      syncLinkedEvents(repo, env.DB).catch((e) => console.error("linkedevents sync failed", e)),
+    );
+    ctx.waitUntil(syncConit(repo, env.DB).catch((e) => console.error("conit sync failed", e)));
     ctx.waitUntil(purgeOldQuota(env.DB));
   },
 };

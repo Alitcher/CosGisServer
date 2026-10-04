@@ -12,9 +12,14 @@ import { submissionQuota } from "../middleware/rate-limit";
 import { d1EventsRepo } from "../repositories/events.repo";
 import { eventsService } from "../services/events.service";
 import { syncLinkedEvents } from "../services/linkedevents";
+import { syncConit } from "../services/conit";
 
 // Admin updates may also change status (NewEvent omits it).
 const AdminUpdateSchema = UpdateEventSchema.extend({ status: StatusEnum.optional() });
+
+/** `?force=1` on a sync route bypasses the importer's freshness guard. */
+const forced = (c: Context<{ Bindings: Bindings }>) =>
+  ["1", "true"].includes((c.req.query("force") ?? "").toLowerCase());
 
 /**
  * HTTP layer for events: parse + validate the request, delegate to the service,
@@ -51,11 +56,17 @@ export function eventsController() {
     return event ? c.json(event) : c.json({ error: "Not found" }, 404);
   });
 
-  // ---------- Helsinki Linked Events import ----------
+  // ---------- imports ----------
   // `?force=1` bypasses the 12h freshness guard. Imports land as pending.
+  // Two feeds, two routes: Linked Events covers the capital region in depth,
+  // conit.fi covers Finnish conventions nationwide.
   routes.post("/v1/events/sync/linkedevents", requireAdmin, async (c) => {
-    const force = ["1", "true"].includes((c.req.query("force") ?? "").toLowerCase());
-    const result = await syncLinkedEvents(d1EventsRepo(c.env.DB), c.env.DB, { force });
+    const result = await syncLinkedEvents(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) });
+    return c.json(result);
+  });
+
+  routes.post("/v1/events/sync/conit", requireAdmin, async (c) => {
+    const result = await syncConit(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) });
     return c.json(result);
   });
 
