@@ -10,6 +10,7 @@ import type { Bindings } from "../types";
 import { requireAdmin } from "../middleware/auth";
 import { submissionQuota } from "../middleware/rate-limit";
 import { d1EventsRepo } from "../repositories/events.repo";
+import { contentDb } from "../repositories/mirror";
 import { eventsService } from "../services/events.service";
 import { syncLinkedEvents } from "../services/linkedevents";
 import { syncConit } from "../services/conit";
@@ -32,7 +33,7 @@ const forced = (c: Context<{ Bindings: Bindings }>) =>
  */
 export function eventsController() {
   const routes = new Hono<{ Bindings: Bindings }>();
-  const svc = (c: Context<{ Bindings: Bindings }>) => eventsService(d1EventsRepo(c.env.DB));
+  const svc = (c: Context<{ Bindings: Bindings }>) => eventsService(d1EventsRepo(contentDb(c)));
 
   // ---------- public reads ----------
   routes.get("/v1/events.geojson", async (c) => {
@@ -72,8 +73,12 @@ export function eventsController() {
 
   // ---------- list + create ----------
   routes.get("/v1/events", async (c) => {
-    const city = c.req.query("city");
-    return c.json(await svc(c).listLive(city || undefined));
+    return c.json(
+      await svc(c).listLive({
+        city: c.req.query("city") || undefined,
+        country: c.req.query("country") || undefined,
+      }),
+    );
   });
 
   routes.post("/v1/events", requireAdmin, async (c) => {

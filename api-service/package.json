@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "node scripts/sync-from-prod.mjs && wrangler dev",
+    "db:sync": "node scripts/sync-from-prod.mjs",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "db:create": "wrangler d1 create cosplay-map-db",

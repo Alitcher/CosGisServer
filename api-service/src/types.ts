@@ -7,6 +7,8 @@
  */
 export type Bindings = {
   DB: D1Database;
+  /** The production DB, reached remotely from `wrangler dev`; local saves are mirrored to it (repositories/mirror.ts). */
+  PROD_DB?: D1Database;
   ADMIN_TOKEN: string;
   ALLOWED_ORIGINS?: string; // comma-separated site origins; empty = allow any (dev)
   SESSION_SECRET?: string;  // HMAC secret for passkey session tokens; falls back to ADMIN_TOKEN

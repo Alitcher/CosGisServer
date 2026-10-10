@@ -12,6 +12,7 @@ export type EventInput = {
   name: string;
   venue: string;
   city: Event["city"];
+  country?: Event["country"]; // missing = 'FI'
   date: string;
   endDate?: string;
   lng: number;
@@ -28,7 +29,7 @@ export type EventInput = {
 };
 
 export interface EventsRepo {
-  list(filter?: { status?: string; city?: string }): Promise<Event[]>;
+  list(filter?: { status?: string; city?: string; country?: string }): Promise<Event[]>;
   get(id: string): Promise<Event | null>;
   create(input: EventInput): Promise<Event>;
   update(id: string, patch: Partial<EventInput>): Promise<Event | null>;
@@ -42,7 +43,8 @@ function rowToEvent(r: Record<string, unknown>): Event {
     id: String(r.id),
     name: String(r.name),
     venue: String(r.venue),
-    city: r.city as Event["city"],
+    city: String(r.city),
+    country: (r.country ?? "FI") as Event["country"],
     date: String(r.date),
     endDate: r.end_date == null ? undefined : String(r.end_date),
     lng: Number(r.lng),
@@ -59,7 +61,7 @@ function rowToEvent(r: Record<string, unknown>): Event {
 
 // updatable field -> column
 const COLUMNS: Array<[keyof EventInput, string]> = [
-  ["name", "name"], ["venue", "venue"], ["city", "city"], ["date", "date"], ["endDate", "end_date"],
+  ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["date", "date"], ["endDate", "end_date"],
   ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
   ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
@@ -79,6 +81,7 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const binds: unknown[] = [];
       if (filter?.status) { where.push("status = ?"); binds.push(filter.status); }
       if (filter?.city) { where.push("city = ?"); binds.push(filter.city); }
+      if (filter?.country) { where.push("country = ?"); binds.push(filter.country); }
       const sql = `SELECT * FROM events ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY date`;
       const { results } = await db.prepare(sql).bind(...binds).all();
       return (results as Record<string, unknown>[]).map(rowToEvent);
@@ -88,10 +91,10 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,country,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
-          id, input.name, input.venue, input.city, input.date, input.endDate ?? null,
+          id, input.name, input.venue, input.city, input.country ?? "FI", input.date, input.endDate ?? null,
           input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
           input.description ?? null, input.url ?? null, input.image ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,

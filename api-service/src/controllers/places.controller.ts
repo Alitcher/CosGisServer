@@ -11,6 +11,7 @@ import type { Bindings } from "../types";
 import { requireAdmin } from "../middleware/auth";
 import { submissionQuota } from "../middleware/rate-limit";
 import { d1PlacesRepo } from "../repositories/places.repo";
+import { contentDb } from "../repositories/mirror";
 import { placesService } from "../services/places.service";
 
 const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional() });
@@ -22,7 +23,7 @@ const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional
  */
 export function placesController() {
   const routes = new Hono<{ Bindings: Bindings }>();
-  const svc = (c: Context<{ Bindings: Bindings }>) => placesService(d1PlacesRepo(c.env.DB));
+  const svc = (c: Context<{ Bindings: Bindings }>) => placesService(d1PlacesRepo(contentDb(c)));
 
   // ---------- public reads ----------
   routes.get("/v1/places.geojson", async (c) => {
@@ -56,6 +57,7 @@ export function placesController() {
       await svc(c).listLive({
         type: c.req.query("type") || undefined,
         city: c.req.query("city") || undefined,
+        country: c.req.query("country") || undefined,
         purpose: purpose?.data,
       }),
     );

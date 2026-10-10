@@ -9,6 +9,15 @@ binding = "DB"
 database_name = "cosplay-map-db"
 database_id = "026fca28-7112-4361-bfed-0bee0e80d899"
 
+# The same database, but always the real one on Cloudflare (remote = true), even
+# in `wrangler dev`. Local saves of events/places are written here too
+# (src/repositories/mirror.ts). Deployed, it's simply a second name for DB and unused.
+[[d1_databases]]
+binding = "PROD_DB"
+database_name = "cosplay-map-db"
+database_id = "026fca28-7112-4361-bfed-0bee0e80d899"
+remote = true
+
 [observability]
 enabled = true
 

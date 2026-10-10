@@ -11,6 +11,7 @@ export type PlaceInput = {
   name: string;
   type: Place["type"];
   city: Place["city"];
+  country?: Place["country"]; // missing = 'FI'
   address?: string;
   lng: number;
   lat: number;
@@ -30,7 +31,7 @@ export type PlaceInput = {
 
 export interface PlacesRepo {
   /** `types` matches any of the listed types (e.g. every practice type). */
-  list(filter?: { status?: string; type?: string; types?: string[]; city?: string }): Promise<Place[]>;
+  list(filter?: { status?: string; type?: string; types?: string[]; city?: string; country?: string }): Promise<Place[]>;
   get(id: string): Promise<Place | null>;
   create(input: PlaceInput): Promise<Place>;
   update(id: string, patch: Partial<PlaceInput>): Promise<Place | null>;
@@ -42,7 +43,8 @@ function rowToPlace(r: Record<string, unknown>): Place {
     id: String(r.id),
     name: String(r.name),
     type: r.type as Place["type"],
-    city: r.city as Place["city"],
+    city: String(r.city),
+    country: (r.country ?? "FI") as Place["country"],
     address: r.address == null ? undefined : String(r.address),
     lng: Number(r.lng),
     lat: Number(r.lat),
@@ -66,6 +68,7 @@ const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean; bool?:
   { key: "name", col: "name" },
   { key: "type", col: "type" },
   { key: "city", col: "city" },
+  { key: "country", col: "country" },
   { key: "address", col: "address" },
   { key: "lng", col: "lng" },
   { key: "lat", col: "lat" },
@@ -104,6 +107,7 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
         binds.push(...filter.types);
       }
       if (filter?.city) { where.push("city = ?"); binds.push(filter.city); }
+      if (filter?.country) { where.push("country = ?"); binds.push(filter.country); }
       const sql = `SELECT * FROM places ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY name`;
       const { results } = await db.prepare(sql).bind(...binds).all();
       return (results as Record<string, unknown>[]).map(rowToPlace);
@@ -113,10 +117,10 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO places (id,name,type,city,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO places (id,name,type,city,country,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
-          id, input.name, input.type, input.city, input.address ?? null, input.lng, input.lat,
+          id, input.name, input.type, input.city, input.country ?? "FI", input.address ?? null, input.lng, input.lat,
           JSON.stringify(input.themes ?? []), JSON.stringify(input.photos ?? []),
           input.description ?? null, input.openingHours ?? null,
           input.booking ?? null, input.price ?? null, input.priceNote ?? null,
