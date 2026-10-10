@@ -1,5 +1,8 @@
 /**
- * Helsinki **Linked Events** import (https://api.hel.fi/linkedevents/v1/).
+ * **Linked Events** import. Linked Events is the open event API several Finnish
+ * cities run with the same schema; each one is an `Instance` below:
+ *   - Helsinki (https://api.hel.fi/linkedevents/v1/) - Helsinki, Vantaa, Espoo
+ *   - Espoo    (https://api.espoo.fi/events/v1/)      - Espoo's own calendar
  *
  * Pulls cosplay/manga community events into our *pending* queue so an admin
  * approves the real ones (existing `POST /v1/events/submissions/:id/approve`).
@@ -9,15 +12,33 @@
  *   2. Incremental - ask upstream only for events changed since our last sync.
  *   3. Dedup      - a unique (source, source_id) index drops re-imports.
  *
- * Data is CC BY 4.0 - attribute "City of Helsinki, CC BY 4.0" where shown.
+ * Data is CC BY 4.0 - attribute the city (e.g. "City of Helsinki, CC BY 4.0") where shown.
  */
 import type { EventsRepo, EventInput } from "../repositories/events.repo";
 import { localDate, localTime } from "./helsinki-time";
 
-const BASE = "https://api.hel.fi/linkedevents/v1/event/";
+export type Instance = {
+  key: string;          // sync_state key and `source` value (dedup is per source)
+  base: string;         // .../event/ endpoint
+  label: string;        // shown in `submittedBy`, e.g. "linkedevents:espoo"
+  cities?: Set<string>; // only keep events in these localities; undefined = any
+};
+
+// Key and source stay "linkedevents" so Helsinki rows imported before Espoo existed still dedupe.
+export const HELSINKI: Instance = {
+  key: "linkedevents",
+  base: "https://api.hel.fi/linkedevents/v1/event/",
+  label: "helsinki",
+  cities: new Set(["Helsinki", "Vantaa", "Espoo"]),
+};
+export const ESPOO: Instance = {
+  key: "linkedevents-espoo",
+  base: "https://api.espoo.fi/events/v1/event/",
+  label: "espoo",
+};
+
 // High-signal keywords only. `anime` alone is noisy (museum exhibits); skip it.
 const KEYWORDS = ["cosplay", "manga"];
-const CITIES = new Set(["Helsinki", "Vantaa", "Espoo"]); // our CityEnum
 const FRESH_TTL_MS = 12 * 60 * 60 * 1000; // re-sync at most every 12h
 const MAX_PAGES = 5; // safety cap; niche queries return far fewer
 
@@ -44,13 +65,16 @@ const stripHtml = (s: string | null): string | undefined =>
   s ? s.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim() || undefined : undefined;
 
 /** Upstream Linked Events event -> our EventInput, or null if not mappable/in-region. */
-export function mapToEventInput(e: RawEvent): (EventInput & { source: string; sourceId: string }) | null {
+export function mapToEventInput(
+  e: RawEvent,
+  inst: Instance = HELSINKI,
+): (EventInput & { source: string; sourceId: string }) | null {
   const loc = e.location ?? {};
   const coords = loc.position?.coordinates;
   const name = pick(e.name);
   const city = pick(loc.address_locality);
   if (!name || !e.start_time || !coords || coords.length !== 2) return null;
-  if (!CITIES.has(city as string)) return null;
+  if (!city || (inst.cities && !inst.cities.has(city))) return null;
 
   const description = stripHtml(pick(e.short_description) || pick(e.description) || null);
   const infoUrl = pick(e.info_url);
@@ -66,7 +90,8 @@ export function mapToEventInput(e: RawEvent): (EventInput & { source: string; so
   return {
     name: name.slice(0, 120),
     venue: (pick(loc.name) || "Unknown venue").slice(0, 120),
-    city: city as EventInput["city"],
+    city,
+    country: "FI",
     date,
     ...(endDate && endDate > date ? { endDate } : {}),
     ...(startTime ? { startTime } : {}),
@@ -77,14 +102,14 @@ export function mapToEventInput(e: RawEvent): (EventInput & { source: string; so
     ...(url ? { url } : {}),
     ...(image ? { image } : {}),
     status: "pending",
-    submittedBy: "linkedevents:helsinki",
-    source: "linkedevents",
+    submittedBy: `linkedevents:${inst.label}`,
+    source: inst.key,
     sourceId: e.id,
   };
 }
 
 /** Fetch raw events for one keyword, following pagination up to MAX_PAGES. */
-async function fetchKeyword(keyword: string, sinceIso: string | null): Promise<RawEvent[]> {
+async function fetchKeyword(inst: Instance, keyword: string, sinceIso: string | null): Promise<RawEvent[]> {
   const params = new URLSearchParams({
     text: keyword,
     include: "location",
@@ -93,11 +118,11 @@ async function fetchKeyword(keyword: string, sinceIso: string | null): Promise<R
     sort: "start_time",
   });
   if (sinceIso) params.set("last_modified_gte", sinceIso); // incremental
-  let url: string | null = `${BASE}?${params.toString()}`;
+  let url: string | null = `${inst.base}?${params.toString()}`;
   const out: RawEvent[] = [];
   for (let page = 0; url && page < MAX_PAGES; page++) {
     const res = await fetch(url, { headers: { Accept: "application/json" } });
-    if (!res.ok) throw new Error(`Linked Events ${keyword} -> HTTP ${res.status}`);
+    if (!res.ok) throw new Error(`Linked Events (${inst.label}) ${keyword} -> HTTP ${res.status}`);
     const json = (await res.json()) as { data?: RawEvent[]; meta?: { next?: string | null } };
     out.push(...(json.data ?? []));
     url = json.meta?.next ?? null;
@@ -122,9 +147,11 @@ export async function syncLinkedEvents(
   repo: EventsRepo,
   db: D1Database,
   opts: { force?: boolean } = {},
+  inst: Instance = HELSINKI,
 ): Promise<SyncResult> {
   const state = (await db
-    .prepare("SELECT last_run, last_modified FROM sync_state WHERE key = 'linkedevents'")
+    .prepare("SELECT last_run, last_modified FROM sync_state WHERE key = ?")
+    .bind(inst.key)
     .first()) as { last_run?: string; last_modified?: string } | null;
 
   // Guard 1: freshness - don't even hit the network if we synced recently.
@@ -138,7 +165,7 @@ export async function syncLinkedEvents(
   // Guard 2: incremental - only events changed since our cursor.
   const since = state?.last_modified ?? null;
   const raw: RawEvent[] = [];
-  for (const kw of KEYWORDS) raw.push(...(await fetchKeyword(kw, since)));
+  for (const kw of KEYWORDS) raw.push(...(await fetchKeyword(inst, kw, since)));
 
   let created = 0,
     duplicates = 0,
@@ -154,7 +181,7 @@ export async function syncLinkedEvents(
     if (seen.has(e.id)) continue;
     seen.add(e.id);
 
-    const input = mapToEventInput(e);
+    const input = mapToEventInput(e, inst);
     if (!input) {
       ignored++;
       continue;
@@ -180,10 +207,10 @@ export async function syncLinkedEvents(
   const now = new Date().toISOString();
   await db
     .prepare(
-      `INSERT INTO sync_state (key, last_run, last_modified) VALUES ('linkedevents', ?, ?)
+      `INSERT INTO sync_state (key, last_run, last_modified) VALUES (?, ?, ?)
        ON CONFLICT(key) DO UPDATE SET last_run = excluded.last_run, last_modified = excluded.last_modified`,
     )
-    .bind(now, maxModified)
+    .bind(inst.key, now, maxModified)
     .run();
 
   return { fetched: raw.length, created, duplicates, ignored, lastModified: maxModified };

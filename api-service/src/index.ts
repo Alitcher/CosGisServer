@@ -5,8 +5,9 @@ import { eventsController } from "./controllers/events.controller";
 import { placesController } from "./controllers/places.controller";
 import { adminController } from "./controllers/admin.controller";
 import { d1EventsRepo } from "./repositories/events.repo";
-import { syncLinkedEvents } from "./services/linkedevents";
+import { syncLinkedEvents, ESPOO } from "./services/linkedevents";
 import { syncConit } from "./services/conit";
+import { syncOuluComics } from "./services/oulucomics";
 import { purgeOldQuota } from "./middleware/rate-limit";
 
 /**
@@ -51,17 +52,21 @@ app.route("/", adminController());
 
 export default {
   fetch: app.fetch,
-  // Cron Trigger (see wrangler.toml). Auto-imports Helsinki Linked Events and the
-  // nationwide conit.fi convention feed; each sync's own freshness guard still
-  // prevents redundant downloads. It also sweeps yesterday's submission-quota
-  // counters. A failing feed must not take the other one down with it, so each
-  // import is caught separately.
+  // Cron Trigger (see wrangler.toml). Auto-imports Helsinki and Espoo Linked Events,
+  // the nationwide conit.fi convention feed and the Oulu Comics Center feed; each
+  // sync's own freshness guard still prevents redundant downloads. It also sweeps
+  // yesterday's submission-quota counters. A failing feed must not take the others
+  // down with it, so each import is caught separately.
   async scheduled(_event: ScheduledController, env: Bindings, ctx: ExecutionContext) {
     const repo = d1EventsRepo(env.DB);
     ctx.waitUntil(
       syncLinkedEvents(repo, env.DB).catch((e) => console.error("linkedevents sync failed", e)),
     );
+    ctx.waitUntil(
+      syncLinkedEvents(repo, env.DB, {}, ESPOO).catch((e) => console.error("linkedevents espoo sync failed", e)),
+    );
     ctx.waitUntil(syncConit(repo, env.DB).catch((e) => console.error("conit sync failed", e)));
+    ctx.waitUntil(syncOuluComics(repo, env.DB).catch((e) => console.error("oulucomics sync failed", e)));
     ctx.waitUntil(purgeOldQuota(env.DB));
   },
 };

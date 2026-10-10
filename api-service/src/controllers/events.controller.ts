@@ -12,8 +12,9 @@ import { submissionQuota } from "../middleware/rate-limit";
 import { d1EventsRepo } from "../repositories/events.repo";
 import { contentDb } from "../repositories/mirror";
 import { eventsService } from "../services/events.service";
-import { syncLinkedEvents } from "../services/linkedevents";
+import { syncLinkedEvents, ESPOO } from "../services/linkedevents";
 import { syncConit } from "../services/conit";
+import { syncOuluComics } from "../services/oulucomics";
 
 // Admin updates may also change status (NewEvent omits it).
 const AdminUpdateSchema = UpdateEventSchema.extend({ status: StatusEnum.optional() });
@@ -59,15 +60,26 @@ export function eventsController() {
 
   // ---------- imports ----------
   // `?force=1` bypasses the 12h freshness guard. Imports land as pending.
-  // Two feeds, two routes: Linked Events covers the capital region in depth,
-  // conit.fi covers Finnish conventions nationwide.
+  // One route per feed: Linked Events covers the capital region in depth (Helsinki
+  // + Espoo), conit.fi covers Finnish conventions nationwide, Oulu Comics Center
+  // covers Oulu.
   routes.post("/v1/events/sync/linkedevents", requireAdmin, async (c) => {
     const result = await syncLinkedEvents(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) });
     return c.json(result);
   });
 
+  routes.post("/v1/events/sync/linkedevents-espoo", requireAdmin, async (c) => {
+    const result = await syncLinkedEvents(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) }, ESPOO);
+    return c.json(result);
+  });
+
   routes.post("/v1/events/sync/conit", requireAdmin, async (c) => {
     const result = await syncConit(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) });
+    return c.json(result);
+  });
+
+  routes.post("/v1/events/sync/oulucomics", requireAdmin, async (c) => {
+    const result = await syncOuluComics(d1EventsRepo(c.env.DB), c.env.DB, { force: forced(c) });
     return c.json(result);
   });
 
