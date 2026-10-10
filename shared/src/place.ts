@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityEnum, StatusEnum, HttpUrl, Longitude, Latitude } from './common';
+import { CityName, CountryEnum, StatusEnum, HttpUrl, Longitude, Latitude } from './common';
 
 /** Kind of cosplay-friendly place. Extensible. */
 export const PlaceTypeEnum = z.enum([
@@ -40,7 +40,10 @@ export const PlaceSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(120),
   type: PlaceTypeEnum,
-  city: CityEnum,
+  city: CityName,
+  // Optional with no .default(): a default would also fill in on partial updates.
+  // Missing on create = 'FI' (repo + DB default); always set on output.
+  country: CountryEnum.optional(),
   address: z.string().max(200).optional(),
   lng: Longitude,
   lat: Latitude,

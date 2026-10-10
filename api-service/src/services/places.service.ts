@@ -10,10 +10,10 @@ import type { PlacesRepo, PlaceInput } from "../repositories/places.repo";
 export function placesService(repo: PlacesRepo) {
   return {
     /**
-     * Public read: only live places, optionally filtered by type, city and/or
-     * purpose (`photo` = Spots tab, `practice` = Practice tab).
+     * Public read: only live places, optionally filtered by type, city, country
+     * and/or purpose (`photo` = Spots tab, `practice` = Practice tab).
      */
-    listLive: ({ purpose, ...filter }: { type?: string; city?: string; purpose?: Purpose } = {}): Promise<Place[]> =>
+    listLive: ({ purpose, ...filter }: { type?: string; city?: string; country?: string; purpose?: Purpose } = {}): Promise<Place[]> =>
       repo.list({ status: "live", ...filter, types: purpose ? typesFor(purpose) : undefined }),
 
     /** Admin read: the community-submission queue awaiting approval. */

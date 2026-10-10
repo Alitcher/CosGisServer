@@ -1,12 +1,15 @@
 import { z } from 'zod';
-import { CityEnum, StatusEnum, IsoDate, LocalTime, Longitude, Latitude } from './common';
+import { CityName, CountryEnum, StatusEnum, IsoDate, LocalTime, Longitude, Latitude } from './common';
 
 /** A dated anime convention plotted on the map. */
 export const EventSchema = z.object({
   id: z.uuid(),
   name: z.string().min(1).max(120),
   venue: z.string().min(1).max(120),
-  city: CityEnum,
+  city: CityName,
+  // Optional with no .default(): a default would also fill in on partial updates.
+  // Missing on create = 'FI' (repo + DB default); always set on output.
+  country: CountryEnum.optional(),
   date: IsoDate,           // start date (single-day events use only this)
   endDate: IsoDate.optional(), // last day, for multi-day events (>= date)
   lng: Longitude,

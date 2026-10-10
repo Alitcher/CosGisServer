@@ -1,18 +1,19 @@
 import { z } from 'zod';
 
 /**
- * Cities covered by the map. Extend as the project grows.
- *
- * Widened past the capital region when the conit.fi import landed: Finnish cons
- * are overwhelmingly held in Tampere, Lahti and Turku, so a capital-only enum
- * rejected almost the entire feed. Names are ASCII (Jyvaskyla, not the accented
- * form) to match the rest of the codebase.
+ * Countries covered by the map (ISO 3166-1 alpha-2): the Nordics, the Baltics,
+ * and the autonomous regions Aland, Faroe Islands and Greenland.
  */
-export const CityEnum = z.enum([
-  'Helsinki', 'Vantaa', 'Espoo',
-  'Tampere', 'Turku', 'Lahti', 'Oulu', 'Jyvaskyla', 'Kuopio',
-]);
-export type City = z.infer<typeof CityEnum>;
+export const CountryEnum = z.enum(['FI', 'SE', 'NO', 'DK', 'IS', 'EE', 'LV', 'LT', 'AX', 'FO', 'GL']);
+export type Country = z.infer<typeof CountryEnum>;
+
+/**
+ * City / town name. Free text now that the map covers several countries; the
+ * client fills it from the address search. Older Finnish rows use ASCII
+ * spellings (Jyvaskyla), newer ones may keep their accents (e.g. Malmo with an accent).
+ */
+export const CityName = z.string().trim().min(1).max(80);
+export type City = z.infer<typeof CityName>;
 
 /** Publish state shared by events and places. */
 export const StatusEnum = z.enum(['live', 'draft', 'pending']);

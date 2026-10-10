@@ -9,8 +9,9 @@ import type { EventsRepo, EventInput } from "../repositories/events.repo";
  */
 export function eventsService(repo: EventsRepo) {
   return {
-    /** Public read: only live conventions, optionally filtered by city. */
-    listLive: (city?: string): Promise<Event[]> => repo.list({ status: "live", city }),
+    /** Public read: only live conventions, optionally filtered by city and/or country. */
+    listLive: (filter: { city?: string; country?: string } = {}): Promise<Event[]> =>
+      repo.list({ status: "live", ...filter }),
 
     /** Admin read: the community-submission queue awaiting approval. */
     listPending: (): Promise<Event[]> => repo.list({ status: "pending" }),
