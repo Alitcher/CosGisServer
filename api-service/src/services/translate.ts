@@ -3,11 +3,14 @@
  * with Workers AI (m2m100, `AI` binding in wrangler.toml).
  *
  * An item keeps its own `name`/`description` in its original language (`lang`);
- * the other languages go into `i18n`. Rules:
+ * the other languages go into `i18n`. Only the description is translated: names
+ * are proper names (Ropecon, Kamppi Center) and machine translation mangles them,
+ * so names always stay as written. Rules:
  *   - entries with `auto: false` were written by an admin and are never touched;
  *   - other entries are filled when missing, and redone when the original text
  *     changes (`refresh`);
- *   - an item without `lang` gets one guessed from its text (and saved).
+ *   - an item without `lang` gets one guessed from its text (and saved);
+ *   - names left in auto entries by older versions are removed.
  *
  * Runs after a save (controllers, in the background) and on the daily cron for
  * items that have none yet (imports, older rows). A failed translation just
@@ -28,6 +31,9 @@ export function guessLang(text: string): Lang {
   if (/[\u00E4\u00F6]/.test(t) || /\b(ja|sek\u00E4|tapahtuma|klo|kirjasto|joka|ovat)\b/.test(t)) return "fi";
   return "en";
 }
+
+/** An auto entry still holding a machine-translated name (written before names were skipped). */
+const hasAutoName = (i18n: I18n | undefined) => Object.values(i18n ?? {}).some((t) => t?.auto !== false && t?.name);
 
 export type Translatable = { id: string; name: string; description?: string; lang?: Lang; i18n?: I18n };
 export type TranslationRepo = { update(id: string, patch: { lang?: Lang; i18n?: I18n }): Promise<unknown> };
@@ -51,13 +57,18 @@ export async function translateItem(ai: Ai, repo: TranslationRepo, item: Transla
     if (to === src) continue;
     const cur = next[to];
     if (cur?.auto === false) continue; // written by hand
-    if (cur && !refresh) continue; // already translated
-    const [name, description] = await Promise.all([
-      translate(ai, item.name, src, to),
-      translate(ai, item.description, src, to),
-    ]);
-    if (!name && !description) continue;
-    next[to] = { ...(name ? { name: name.slice(0, 120) } : {}), ...(description ? { description: description.slice(0, 800) } : {}), auto: true };
+    if (cur?.name) { // old machine-translated name: drop it, keep the rest
+      const { name: _drop, ...rest } = cur;
+      next[to] = rest;
+      changed = true;
+    }
+    if (cur?.description && !refresh) continue; // already translated
+    const description = await translate(ai, item.description, src, to);
+    if (!description) {
+      if (next[to] && !next[to]?.description) delete next[to]; // nothing left in it
+      continue;
+    }
+    next[to] = { description: description.slice(0, 800), auto: true };
     changed = true;
   }
   if (changed) await repo.update(item.id, { lang: src, i18n: next });
@@ -66,7 +77,7 @@ export async function translateItem(ai: Ai, repo: TranslationRepo, item: Transla
 
 /**
  * Translate items that have no translations yet (imports, rows from before this
- * feature), at most `max` per call so one run stays within limits.
+ * feature) or still carry machine-translated names, at most `max` per call so one run stays within limits.
  */
 export async function translateMissing(
   ai: Ai,
@@ -74,7 +85,7 @@ export async function translateMissing(
   max = 25,
 ): Promise<{ translated: number; remaining: number }> {
   const todo = sets.flatMap(({ items, repo }) =>
-    items.filter((i) => !i.i18n || Object.keys(i.i18n).length === 0).map((item) => ({ item, repo })),
+    items.filter((i) => !i.i18n || Object.keys(i.i18n).length === 0 || hasAutoName(i.i18n)).map((item) => ({ item, repo })),
   );
   let translated = 0;
   for (const { item, repo } of todo.slice(0, max)) {
