@@ -13,6 +13,7 @@ import { d1EventsRepo } from "../repositories/events.repo";
 import { contentDb } from "../repositories/mirror";
 import { translateInBackground } from "../services/translate";
 import { eventsService } from "../services/events.service";
+import { findDuplicateEvent, duplicateBody } from "../services/duplicates";
 import { syncLinkedEvents, ESPOO } from "../services/linkedevents";
 import { syncConit } from "../services/conit";
 import { syncOuluComics } from "../services/oulucomics";
@@ -49,6 +50,9 @@ export function eventsController() {
   routes.post("/v1/events/submissions", submissionQuota, async (c) => {
     const parsed = EventSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
+    // Same link on the same date as anything stored (live, pending or draft) = duplicate.
+    const dup = findDuplicateEvent(await d1EventsRepo(contentDb(c)).list(), parsed.data);
+    if (dup) return c.json(duplicateBody("event", dup), 409);
     const event = await svc(c).submit(parsed.data);
     translate(c, event);
     return c.json({ ok: true, id: event.id }, 201);

@@ -14,6 +14,7 @@ import { d1PlacesRepo } from "../repositories/places.repo";
 import { contentDb } from "../repositories/mirror";
 import { translateInBackground } from "../services/translate";
 import { placesService } from "../services/places.service";
+import { findDuplicatePlace, duplicateBody } from "../services/duplicates";
 
 const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional() });
 
@@ -38,6 +39,9 @@ export function placesController() {
   routes.post("/v1/places/submissions", submissionQuota, async (c) => {
     const parsed = PlaceSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
+    // Same address, within 50 m, same name, link or photo as anything stored = duplicate.
+    const dup = findDuplicatePlace(await d1PlacesRepo(contentDb(c)).list(), parsed.data);
+    if (dup) return c.json(duplicateBody("spot", dup), 409);
     const place = await svc(c).submit(parsed.data);
     translate(c, place);
     return c.json({ ok: true, id: place.id }, 201);

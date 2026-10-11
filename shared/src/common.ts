@@ -52,6 +52,26 @@ export const LocalTime = z
  */
 export const HttpUrl = z.url({ protocol: /^https?$/ });
 
-/** Geographic coordinate bounds (WGS84). Stored as plain numbers — D1 has no PostGIS. */
+/** Geographic coordinate bounds (WGS84). Stored as plain numbers - D1 has no PostGIS. */
 export const Longitude = z.number().min(-180).max(180);
 export const Latitude = z.number().min(-90).max(90);
+
+/** Kinds of public transport stop shown next to an event or place. */
+export const TransitKindEnum = z.enum(['metro', 'train', 'tram', 'bus']);
+export type TransitKind = z.infer<typeof TransitKindEnum>;
+
+/** One nearby stop: what it is, its name, and the straight-line distance in metres. */
+export const TransitStopSchema = z.object({
+  kind: TransitKindEnum,
+  name: z.string().trim().min(1).max(80),
+  distance: z.number().int().min(0).max(5000),
+});
+export type TransitStop = z.infer<typeof TransitStopSchema>;
+
+/**
+ * Nearby public transport, set by an admin: typed by hand or filled from
+ * OpenStreetMap (services/transit.ts). Missing = never checked; [] = checked,
+ * nothing close.
+ */
+export const TransitSchema = z.array(TransitStopSchema).max(8);
+export type Transit = z.infer<typeof TransitSchema>;

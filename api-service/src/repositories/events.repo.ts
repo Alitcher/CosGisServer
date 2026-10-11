@@ -1,4 +1,4 @@
-import type { Event, I18n } from "@anime-con/shared";
+import type { Event, I18n, Transit } from "@anime-con/shared";
 
 /** i18n JSON column -> object (bad or empty JSON = none). */
 export function parseI18n(v: unknown): I18n | undefined {
@@ -6,6 +6,17 @@ export function parseI18n(v: unknown): I18n | undefined {
   try {
     const o = JSON.parse(String(v)) as I18n;
     return o && typeof o === "object" ? o : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** transit JSON column -> array (NULL = never checked, bad JSON = treated the same). */
+export function parseTransit(v: unknown): Transit | undefined {
+  if (v == null || v === "") return undefined;
+  try {
+    const o = JSON.parse(String(v)) as Transit;
+    return Array.isArray(o) ? o : undefined;
   } catch {
     return undefined;
   }
@@ -26,6 +37,7 @@ export type EventInput = {
   country?: Event["country"]; // missing = 'FI'
   lang?: Event["lang"];       // language of name/description
   i18n?: Event["i18n"];       // translations, stored as JSON
+  transit?: Event["transit"]; // nearby stops, stored as JSON
   date: string;
   endDate?: string;
   lng: number;
@@ -60,6 +72,7 @@ function rowToEvent(r: Record<string, unknown>): Event {
     country: (r.country ?? "FI") as Event["country"],
     lang: r.lang == null ? undefined : (r.lang as Event["lang"]),
     i18n: parseI18n(r.i18n),
+    transit: parseTransit(r.transit),
     date: String(r.date),
     endDate: r.end_date == null ? undefined : String(r.end_date),
     lng: Number(r.lng),
@@ -76,7 +89,7 @@ function rowToEvent(r: Record<string, unknown>): Event {
 
 // updatable field -> column
 const COLUMNS: Array<[keyof EventInput, string]> = [
-  ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["lang", "lang"], ["i18n", "i18n"], ["date", "date"], ["endDate", "end_date"],
+  ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["lang", "lang"], ["i18n", "i18n"], ["transit", "transit"], ["date", "date"], ["endDate", "end_date"],
   ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
   ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
@@ -106,11 +119,11 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,country,lang,i18n,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.venue, input.city, input.country ?? "FI", input.lang ?? null,
-          input.i18n ? JSON.stringify(input.i18n) : null, input.date, input.endDate ?? null,
+          input.i18n ? JSON.stringify(input.i18n) : null, input.transit ? JSON.stringify(input.transit) : null, input.date, input.endDate ?? null,
           input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
           input.description ?? null, input.url ?? null, input.image ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
@@ -132,7 +145,7 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const vals: unknown[] = [];
       for (const [key, col] of COLUMNS) {
         const v = patch[key];
-        if (v !== undefined) { sets.push(`${col} = ?`); vals.push(key === "i18n" ? JSON.stringify(v) : v); }
+        if (v !== undefined) { sets.push(`${col} = ?`); vals.push(key === "i18n" || key === "transit" ? JSON.stringify(v) : v); }
       }
       if (sets.length > 0) {
         vals.push(id);

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, HttpUrl, Longitude, Latitude } from './common';
+import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, HttpUrl, Longitude, Latitude, TransitSchema } from './common';
 
 /** Kind of cosplay-friendly place. Extensible. */
 export const PlaceTypeEnum = z.enum([
@@ -56,10 +56,12 @@ export const PlaceSchema = z.object({
   photos: z.array(PhotoSchema).default([]),
   description: z.string().max(800).optional(),
   openingHours: z.string().max(200).optional(),
+  /** Nearby metro/train/tram/bus stops. Admin-only, see TransitSchema. */
+  transit: TransitSchema.optional(),
   // ---- practice places only (dance-studio / practice-space) ----
   booking: BookingEnum.optional(),
   price: PriceEnum.optional(),
-  priceNote: z.string().max(120).optional(), // e.g. "15 €/h", "free for under 18s"
+  priceNote: z.string().max(120).optional(), // e.g. "15 EUR/h", "free for under 18s"
   // Optional rather than .default([]): a default would be filled in on partial
   // updates too, so a PUT without `facilities` would wipe the saved list.
   facilities: z.array(FacilityEnum).max(FacilityEnum.options.length).optional(),
@@ -71,16 +73,16 @@ export const PlaceSchema = z.object({
 });
 export type Place = z.infer<typeof PlaceSchema>;
 
-/** Payload to create a place — server assigns id/status/createdAt. */
+/** Payload to create a place - server assigns id/status/createdAt. */
 export const NewPlaceSchema = PlaceSchema.omit({ id: true, status: true, createdAt: true });
 export type NewPlace = z.infer<typeof NewPlaceSchema>;
 
-/** Payload to update a place — every field optional. */
+/** Payload to update a place - every field optional. */
 export const UpdatePlaceSchema = NewPlaceSchema.partial();
 export type UpdatePlace = z.infer<typeof UpdatePlaceSchema>;
 
-/** Community-submitted place (lands in the pending queue). `youthFriendly` is admin-only. */
-export const PlaceSubmissionSchema = NewPlaceSchema.omit({ youthFriendly: true }).extend({
+/** Community-submitted place (lands in the pending queue). `youthFriendly` and `transit` are admin-only. */
+export const PlaceSubmissionSchema = NewPlaceSchema.omit({ youthFriendly: true, transit: true }).extend({
   submittedBy: z.string().min(1).max(60).optional(),
 });
 export type PlaceSubmission = z.infer<typeof PlaceSubmissionSchema>;

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:create": "wrangler d1 create cosplay-map-db",
     "db:migrate": "wrangler d1 migrations apply cosplay-map-db --local",
-    "db:migrate:remote": "wrangler d1 migrations apply cosplay-map-db --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply cosplay-map-db --remote",
+    "db:transit": "node scripts/fill-transit.ts"
   },
   "dependencies": {
     "@anime-con/shared": "workspace:*",

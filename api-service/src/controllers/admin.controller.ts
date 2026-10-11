@@ -7,6 +7,8 @@ import { d1EventsRepo } from "../repositories/events.repo";
 import { d1PlacesRepo } from "../repositories/places.repo";
 import { contentDb } from "../repositories/mirror";
 import { translateMissing } from "../services/translate";
+import { lookupTransit } from "../services/transit";
+import { Latitude, Longitude } from "@anime-con/shared";
 import type { RegistrationResponseJSON, AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 /**
@@ -58,6 +60,20 @@ export function adminController() {
         { items: await places.list(), repo: places },
       ]),
     );
+  });
+  // Nearby metro/train/tram/bus stops for a point (Digitransit in Finland, else OSM). Only returns
+  // suggestions: the admin reviews or edits them and saves with the event/place.
+  routes.post("/v1/admin/transit/lookup", requireAdmin, async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { lat?: unknown; lng?: unknown } | null;
+    const lat = Latitude.safeParse(body?.lat);
+    const lng = Longitude.safeParse(body?.lng);
+    if (!lat.success || !lng.success) return c.json({ error: "lat and lng are required" }, 400);
+    try {
+      return c.json({ transit: await lookupTransit(lat.data, lng.data, { digitransitKey: c.env.DIGITRANSIT_KEY }) });
+    } catch (e) {
+      console.error("transit lookup failed", e);
+      return c.json({ error: "Transit lookup failed, try again or fill it in by hand" }, 502);
+    }
   });
   return routes;
 }

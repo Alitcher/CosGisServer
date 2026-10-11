@@ -19,4 +19,5 @@ export type Bindings = {
   RP_ORIGIN?: string;       // expected site origin, default "http://localhost:3000"
   SUBMISSIONS_PER_DEVICE_PER_DAY?: string; // public submission quota per device, default 5
   SUBMISSIONS_PER_IP_PER_DAY?: string;     // backstop quota per IP, default 20
+  DIGITRANSIT_KEY?: string; // free key from portal-api.digitransit.fi; Finnish transit lookups (services/transit.ts)
 };

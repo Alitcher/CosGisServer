@@ -2,3 +2,5 @@
 ADMIN_TOKEN=dev-secret-change-me
 # Optional: dedicated HMAC secret for passkey session tokens (falls back to ADMIN_TOKEN).
 # SESSION_SECRET=another-dev-secret
+# Free key from https://portal-api.digitransit.fi - nearby stops in Finland (falls back to OpenStreetMap).
+# DIGITRANSIT_KEY=your-key
