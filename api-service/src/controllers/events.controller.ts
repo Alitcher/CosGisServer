@@ -21,6 +21,11 @@ import { syncOuluComics } from "../services/oulucomics";
 // Admin updates may also change status (NewEvent omits it).
 const AdminUpdateSchema = UpdateEventSchema.extend({ status: StatusEnum.optional() });
 
+/** A price range must not run backwards ("from 25 to 10"). */
+const priceRangeOk = (e: { priceMin?: number; priceMax?: number }) =>
+  e.priceMin == null || e.priceMax == null || e.priceMax >= e.priceMin;
+const BAD_PRICE = { error: "priceMax can't be lower than priceMin" } as const;
+
 /** `?force=1` on a sync route bypasses the importer's freshness guard. */
 const forced = (c: Context<{ Bindings: Bindings }>) =>
   ["1", "true"].includes((c.req.query("force") ?? "").toLowerCase());
@@ -50,6 +55,7 @@ export function eventsController() {
   routes.post("/v1/events/submissions", submissionQuota, async (c) => {
     const parsed = EventSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
+    if (!priceRangeOk(parsed.data)) return c.json(BAD_PRICE, 400);
     // Same link on the same date as anything stored (live, pending or draft) = duplicate.
     const dup = findDuplicateEvent(await d1EventsRepo(contentDb(c)).list(), parsed.data);
     if (dup) return c.json(duplicateBody("event", dup), 409);
@@ -105,6 +111,7 @@ export function eventsController() {
   routes.post("/v1/events", requireAdmin, async (c) => {
     const parsed = NewEventSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid event", issues: parsed.error.issues }, 400);
+    if (!priceRangeOk(parsed.data)) return c.json(BAD_PRICE, 400);
     const event = await svc(c).create(parsed.data);
     translate(c, event);
     return c.json(event, 201);
@@ -119,6 +126,7 @@ export function eventsController() {
   routes.put("/v1/events/:id", requireAdmin, async (c) => {
     const parsed = AdminUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
+    if (!priceRangeOk(parsed.data)) return c.json(BAD_PRICE, 400);
     const before = await svc(c).get(c.req.param("id"));
     const event = await svc(c).update(c.req.param("id"), parsed.data);
     // Original text changed: redo the auto translations (hand-written ones are kept).

@@ -45,6 +45,10 @@ export type EventInput = {
   description?: string;
   url?: string;       // link to the event's info page
   image?: string;     // thumbnail / logo URL
+  admission?: Event["admission"]; // free | paid | mixed
+  priceMin?: number;  // EUR
+  priceMax?: number;  // EUR
+  priceNote?: string;
   startTime?: string; // local 'HH:MM'
   endTime?: string;   // local 'HH:MM'
   status?: Event["status"];
@@ -80,6 +84,10 @@ function rowToEvent(r: Record<string, unknown>): Event {
     description: r.description == null ? undefined : String(r.description),
     url: r.url == null ? undefined : String(r.url),
     image: r.image == null ? undefined : String(r.image),
+    admission: r.admission == null ? undefined : (r.admission as Event["admission"]),
+    priceMin: r.price_min == null ? undefined : Number(r.price_min),
+    priceMax: r.price_max == null ? undefined : Number(r.price_max),
+    priceNote: r.price_note == null ? undefined : String(r.price_note),
     startTime: r.start_time == null ? undefined : String(r.start_time),
     endTime: r.end_time == null ? undefined : String(r.end_time),
     status: r.status as Event["status"],
@@ -91,6 +99,7 @@ function rowToEvent(r: Record<string, unknown>): Event {
 const COLUMNS: Array<[keyof EventInput, string]> = [
   ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["lang", "lang"], ["i18n", "i18n"], ["transit", "transit"], ["date", "date"], ["endDate", "end_date"],
   ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
+  ["admission", "admission"], ["priceMin", "price_min"], ["priceMax", "price_max"], ["priceNote", "price_note"],
   ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
 
@@ -119,13 +128,14 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,admission,price_min,price_max,price_note,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.venue, input.city, input.country ?? "FI", input.lang ?? null,
           input.i18n ? JSON.stringify(input.i18n) : null, input.transit ? JSON.stringify(input.transit) : null, input.date, input.endDate ?? null,
           input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
-          input.description ?? null, input.url ?? null, input.image ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          input.description ?? null, input.url ?? null, input.image ?? null,
+          input.admission ?? null, input.priceMin ?? null, input.priceMax ?? null, input.priceNote ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
         )
         .run();

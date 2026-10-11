@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema } from './common';
+import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema, AdmissionEnum, PriceEur } from './common';
 
 /** A dated anime convention plotted on the map. */
 export const EventSchema = z.object({
@@ -21,6 +21,12 @@ export const EventSchema = z.object({
   description: z.string().max(500).optional(),
   url: z.url().max(500).optional(),   // organizer / event-info page (e.g. Linked Events info_url)
   image: z.url().max(500).optional(), // thumbnail / logo shown on cards and map popups
+  /** Entry: free, paid, or free entry with paid extras. Missing = not known. */
+  admission: AdmissionEnum.optional(),
+  /** Cheapest / dearest ticket in EUR. One price = only priceMin (or both the same). */
+  priceMin: PriceEur.optional(),
+  priceMax: PriceEur.optional(),
+  priceNote: z.string().max(160).optional(), // e.g. "Day ticket 15, weekend 25, under 7 free"
   /** Nearby metro/train/tram/bus stops. Admin-only, see TransitSchema. */
   transit: TransitSchema.optional(),
   startTime: LocalTime.optional(),    // doors open on `date`

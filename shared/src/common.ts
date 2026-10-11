@@ -56,6 +56,15 @@ export const HttpUrl = z.url({ protocol: /^https?$/ });
 export const Longitude = z.number().min(-180).max(180);
 export const Latitude = z.number().min(-90).max(90);
 
+/**
+ * Event entry: free, paid, or free entry with paid extras (workshops, signings...).
+ */
+export const AdmissionEnum = z.enum(['free', 'paid', 'mixed']);
+export type Admission = z.infer<typeof AdmissionEnum>;
+
+/** A price in euros (whole or cents), e.g. 15 or 12.5. */
+export const PriceEur = z.number().min(0).max(10000);
+
 /** Kinds of public transport stop shown next to an event or place. */
 export const TransitKindEnum = z.enum(['metro', 'train', 'tram', 'bus']);
 export type TransitKind = z.infer<typeof TransitKindEnum>;
