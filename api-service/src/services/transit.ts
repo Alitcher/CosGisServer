@@ -95,7 +95,7 @@ export async function lookupOsm(lat: number, lng: number): Promise<Transit> {
       ENDPOINTS.map(async (url) => {
         const res = await fetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "CosoraAtlas/1.0 (transit lookup)" },
+          headers: { "Content-Type": "application/x-www-form-urlencoded", "User-Agent": "CosOverHere/1.0 (transit lookup)" },
           body,
           signal: stop.signal,
         });
