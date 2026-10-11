@@ -3,6 +3,10 @@ import type { Bindings } from "../types";
 import { requireAdmin, sessionSecret } from "../middleware/auth";
 import { signSession } from "../auth/session";
 import { adminCount, beginRegistration, finishRegistration, beginLogin, finishLogin } from "../auth/webauthn";
+import { d1EventsRepo } from "../repositories/events.repo";
+import { d1PlacesRepo } from "../repositories/places.repo";
+import { contentDb } from "../repositories/mirror";
+import { translateMissing } from "../services/translate";
 import type { RegistrationResponseJSON, AuthenticationResponseJSON } from "@simplewebauthn/server";
 
 /**
@@ -41,5 +45,19 @@ export function adminController() {
     return c.json({ token: await signSession(sessionSecret(c.env)) });
   });
 
+
+  // Translate events/places that have no other languages yet (imports, older rows),
+  // up to 25 per call. Call again while 'remaining' > 0. The daily cron does the same.
+  routes.post("/v1/admin/translate", requireAdmin, async (c) => {
+    if (!c.env.AI) return c.json({ error: "Workers AI (AI binding) is not configured" }, 503);
+    const events = d1EventsRepo(contentDb(c));
+    const places = d1PlacesRepo(contentDb(c));
+    return c.json(
+      await translateMissing(c.env.AI, [
+        { items: await events.list(), repo: events },
+        { items: await places.list(), repo: places },
+      ]),
+    );
+  });
   return routes;
 }

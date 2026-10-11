@@ -12,6 +12,7 @@ import { requireAdmin } from "../middleware/auth";
 import { submissionQuota } from "../middleware/rate-limit";
 import { d1PlacesRepo } from "../repositories/places.repo";
 import { contentDb } from "../repositories/mirror";
+import { translateInBackground } from "../services/translate";
 import { placesService } from "../services/places.service";
 
 const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional() });
@@ -24,6 +25,9 @@ const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional
 export function placesController() {
   const routes = new Hono<{ Bindings: Bindings }>();
   const svc = (c: Context<{ Bindings: Bindings }>) => placesService(d1PlacesRepo(contentDb(c)));
+  // After a save: fill in the other languages in the background (services/translate.ts).
+  const translate = (c: Context<{ Bindings: Bindings }>, item: Parameters<typeof translateInBackground>[2], refresh = false) =>
+    translateInBackground(c, d1PlacesRepo(contentDb(c)), item, refresh);
 
   // ---------- public reads ----------
   routes.get("/v1/places.geojson", async (c) => {
@@ -35,6 +39,7 @@ export function placesController() {
     const parsed = PlaceSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
     const place = await svc(c).submit(parsed.data);
+    translate(c, place);
     return c.json({ ok: true, id: place.id }, 201);
   });
 
@@ -67,6 +72,7 @@ export function placesController() {
     const parsed = NewPlaceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid place", issues: parsed.error.issues }, 400);
     const place = await svc(c).create(parsed.data);
+    translate(c, place);
     return c.json(place, 201);
   });
 
@@ -79,7 +85,10 @@ export function placesController() {
   routes.put("/v1/places/:id", requireAdmin, async (c) => {
     const parsed = AdminUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
+    const before = await svc(c).get(c.req.param("id"));
     const place = await svc(c).update(c.req.param("id"), parsed.data);
+    // Original text changed: redo the auto translations (hand-written ones are kept).
+    translate(c, place, !!before && !!place && (before.name !== place.name || before.description !== place.description));
     return place ? c.json(place) : c.json({ error: "Not found" }, 404);
   });
 

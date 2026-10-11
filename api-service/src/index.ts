@@ -5,6 +5,8 @@ import { eventsController } from "./controllers/events.controller";
 import { placesController } from "./controllers/places.controller";
 import { adminController } from "./controllers/admin.controller";
 import { d1EventsRepo } from "./repositories/events.repo";
+import { d1PlacesRepo } from "./repositories/places.repo";
+import { translateMissing } from "./services/translate";
 import { syncLinkedEvents, ESPOO } from "./services/linkedevents";
 import { syncConit } from "./services/conit";
 import { syncOuluComics } from "./services/oulucomics";
@@ -67,6 +69,17 @@ export default {
     );
     ctx.waitUntil(syncConit(repo, env.DB).catch((e) => console.error("conit sync failed", e)));
     ctx.waitUntil(syncOuluComics(repo, env.DB).catch((e) => console.error("oulucomics sync failed", e)));
+    // Translate imports and older rows that have no other languages yet (capped per run).
+    const ai = env.AI;
+    if (ai) {
+      const places = d1PlacesRepo(env.DB);
+      ctx.waitUntil(
+        (async () => translateMissing(ai, [
+          { items: await repo.list(), repo },
+          { items: await places.list(), repo: places },
+        ]))().catch((e) => console.error("translate sync failed", e)),
+      );
+    }
     ctx.waitUntil(purgeOldQuota(env.DB));
   },
 };

@@ -11,6 +11,7 @@ import { requireAdmin } from "../middleware/auth";
 import { submissionQuota } from "../middleware/rate-limit";
 import { d1EventsRepo } from "../repositories/events.repo";
 import { contentDb } from "../repositories/mirror";
+import { translateInBackground } from "../services/translate";
 import { eventsService } from "../services/events.service";
 import { syncLinkedEvents, ESPOO } from "../services/linkedevents";
 import { syncConit } from "../services/conit";
@@ -35,6 +36,9 @@ const forced = (c: Context<{ Bindings: Bindings }>) =>
 export function eventsController() {
   const routes = new Hono<{ Bindings: Bindings }>();
   const svc = (c: Context<{ Bindings: Bindings }>) => eventsService(d1EventsRepo(contentDb(c)));
+  // After a save: fill in the other languages in the background (services/translate.ts).
+  const translate = (c: Context<{ Bindings: Bindings }>, item: Parameters<typeof translateInBackground>[2], refresh = false) =>
+    translateInBackground(c, d1EventsRepo(contentDb(c)), item, refresh);
 
   // ---------- public reads ----------
   routes.get("/v1/events.geojson", async (c) => {
@@ -46,6 +50,7 @@ export function eventsController() {
     const parsed = EventSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
     const event = await svc(c).submit(parsed.data);
+    translate(c, event);
     return c.json({ ok: true, id: event.id }, 201);
   });
 
@@ -97,6 +102,7 @@ export function eventsController() {
     const parsed = NewEventSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid event", issues: parsed.error.issues }, 400);
     const event = await svc(c).create(parsed.data);
+    translate(c, event);
     return c.json(event, 201);
   });
 
@@ -109,7 +115,10 @@ export function eventsController() {
   routes.put("/v1/events/:id", requireAdmin, async (c) => {
     const parsed = AdminUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
+    const before = await svc(c).get(c.req.param("id"));
     const event = await svc(c).update(c.req.param("id"), parsed.data);
+    // Original text changed: redo the auto translations (hand-written ones are kept).
+    translate(c, event, !!before && !!event && (before.name !== event.name || before.description !== event.description));
     return event ? c.json(event) : c.json({ error: "Not found" }, 404);
   });
 

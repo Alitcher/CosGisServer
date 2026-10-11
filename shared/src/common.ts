@@ -15,6 +15,23 @@ export type Country = z.infer<typeof CountryEnum>;
 export const CityName = z.string().trim().min(1).max(80);
 export type City = z.infer<typeof CityName>;
 
+/** UI languages, which are also the languages event/place text is translated into. */
+export const LangEnum = z.enum(['en', 'fi', 'et', 'th']);
+export type Lang = z.infer<typeof LangEnum>;
+
+/**
+ * Translated name/description per language. The item's own `name`/`description`
+ * stay in its original language (`lang`). `auto: false` marks a translation an
+ * admin wrote or fixed by hand; auto-translation never overwrites those.
+ */
+export const TranslationSchema = z.object({
+  name: z.string().max(120).optional(),
+  description: z.string().max(800).optional(),
+  auto: z.boolean().optional(),
+});
+export const I18nSchema = z.partialRecord(LangEnum, TranslationSchema);
+export type I18n = z.infer<typeof I18nSchema>;
+
 /** Publish state shared by events and places. */
 export const StatusEnum = z.enum(['live', 'draft', 'pending']);
 export type Status = z.infer<typeof StatusEnum>;

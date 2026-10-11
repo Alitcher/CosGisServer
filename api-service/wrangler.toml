@@ -18,6 +18,11 @@ database_name = "cosplay-map-db"
 database_id = "026fca28-7112-4361-bfed-0bee0e80d899"
 remote = true
 
+# Workers AI: auto-translates event/place text into en/fi/et/th (src/services/translate.ts).
+# In `wrangler dev` this always runs on Cloudflare (needs `wrangler login`).
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true
 

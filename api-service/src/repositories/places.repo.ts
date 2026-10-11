@@ -1,4 +1,5 @@
 import type { Place } from "@anime-con/shared";
+import { parseI18n } from "./events.repo";
 
 /**
  * Data-access seam for places.
@@ -12,6 +13,8 @@ export type PlaceInput = {
   type: Place["type"];
   city: Place["city"];
   country?: Place["country"]; // missing = 'FI'
+  lang?: Place["lang"];       // language of name/description
+  i18n?: Place["i18n"];       // translations, stored as JSON
   address?: string;
   lng: number;
   lat: number;
@@ -45,6 +48,8 @@ function rowToPlace(r: Record<string, unknown>): Place {
     type: r.type as Place["type"],
     city: String(r.city),
     country: (r.country ?? "FI") as Place["country"],
+    lang: r.lang == null ? undefined : (r.lang as Place["lang"]),
+    i18n: parseI18n(r.i18n),
     address: r.address == null ? undefined : String(r.address),
     lng: Number(r.lng),
     lat: Number(r.lat),
@@ -69,6 +74,8 @@ const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean; bool?:
   { key: "type", col: "type" },
   { key: "city", col: "city" },
   { key: "country", col: "country" },
+  { key: "lang", col: "lang" },
+  { key: "i18n", col: "i18n", json: true },
   { key: "address", col: "address" },
   { key: "lng", col: "lng" },
   { key: "lat", col: "lat" },
@@ -117,10 +124,11 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO places (id,name,type,city,country,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO places (id,name,type,city,country,lang,i18n,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
-          id, input.name, input.type, input.city, input.country ?? "FI", input.address ?? null, input.lng, input.lat,
+          id, input.name, input.type, input.city, input.country ?? "FI", input.lang ?? null,
+          input.i18n ? JSON.stringify(input.i18n) : null, input.address ?? null, input.lng, input.lat,
           JSON.stringify(input.themes ?? []), JSON.stringify(input.photos ?? []),
           input.description ?? null, input.openingHours ?? null,
           input.booking ?? null, input.price ?? null, input.priceNote ?? null,
