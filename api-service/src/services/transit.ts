@@ -4,9 +4,11 @@ import type { Transit, TransitKind } from "@anime-con/shared";
  * Nearby public transport for an event or place. Used by the admin "Look up"
  * button (POST /v1/admin/transit/lookup) and by scripts/fill-transit.ts.
  *
- * - Finland: Digitransit (HSL / national journey planner data, official, needs a
- *   free key in DIGITRANSIT_KEY). Falls back to OSM if it fails.
- * - Everywhere else (or without a key): OpenStreetMap through the free Overpass API.
+ * - Finland + Estonia: Digitransit (HSL / national journey planner data, official,
+ *   needs a free key in DIGITRANSIT_KEY).
+ * - Everywhere else (Latvia, Lithuania, Sweden, ...), or when Digitransit fails:
+ *   Transitous (transitous.org, free, timetable data for all of Europe, no key).
+ * - Last resort: OpenStreetMap through the free Overpass API (often overloaded).
  *
  * Returns the nearest named stop of each kind, nearest first. Rail stations are
  * searched further out than tram and bus stops, since people walk further to them.
@@ -152,17 +154,69 @@ export async function lookupDigitransit(lat: number, lng: number, key: string): 
   return [...best].map(([kind, v]) => ({ kind, ...v })).sort((a, b) => a.distance - b.distance);
 }
 
+// ---------------- Transitous (all of Europe) ----------------
+
+const TRANSITOUS_URL = "https://api.transitous.org/api/v1/map/stops";
+
+/** Transitous (MOTIS) transport modes -> our kinds. Ferries, planes etc. are left out. */
+export function transitousKind(mode: string): TransitKind | null {
+  if (mode === "SUBWAY" || mode === "METRO") return "metro";
+  if (mode === "TRAM") return "tram";
+  if (mode === "BUS" || mode === "COACH") return "bus";
+  if (mode === "SUBURBAN" || mode === "LONG_DISTANCE" || mode.endsWith("RAIL")) return "train";
+  return null;
+}
+
+type TransitousStop = { name?: string; lat?: number; lon?: number; modes?: string[] };
+
+/** Nearest stop per kind from Transitous stops, nearest first. */
+export function pickNearestTransitous(stops: TransitousStop[], lat: number, lng: number): Transit {
+  const best = new Map<TransitKind, { name: string; distance: number }>();
+  for (const st of stops) {
+    const name = (st.name ?? "").trim();
+    if (!name || st.lat == null || st.lon == null) continue;
+    const distance = Math.round(distanceM(lat, lng, st.lat, st.lon) / 10) * 10;
+    for (const mode of st.modes ?? []) {
+      const kind = transitousKind(mode);
+      if (!kind || distance > TRANSIT_RADIUS[kind]) continue;
+      const cur = best.get(kind);
+      if (!cur || distance < cur.distance) best.set(kind, { name: name.slice(0, 80), distance });
+    }
+  }
+  return [...best].map(([kind, v]) => ({ kind, ...v })).sort((a, b) => a.distance - b.distance);
+}
+
+/** Nearest stops from Transitous. Throws on errors or after TIMEOUT_MS. */
+export async function lookupTransitous(lat: number, lng: number): Promise<Transit> {
+  // A box just big enough for the largest radius; pickNearestTransitous cuts it to the real radius.
+  const r = Math.max(...Object.values(TRANSIT_RADIUS));
+  const dLat = r / 111320;
+  const dLng = r / (111320 * Math.cos((lat * Math.PI) / 180));
+  const url = `${TRANSITOUS_URL}?min=${lat - dLat},${lng - dLng}&max=${lat + dLat},${lng + dLng}`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": "CosOverHere/1.0 (transit lookup)" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`Transitous ${res.status}`);
+  return pickNearestTransitous((await res.json()) as TransitousStop[], lat, lng);
+}
+
 /**
- * Nearest stops around a point: Digitransit inside Finland (when a key is set),
- * OpenStreetMap otherwise or when Digitransit fails.
+ * Nearest stops around a point: Digitransit in Finland + Estonia (when a key is
+ * set), then Transitous, then OpenStreetMap as the last resort.
  */
 export async function lookupTransit(lat: number, lng: number, opts: { digitransitKey?: string } = {}): Promise<Transit> {
   if (opts.digitransitKey && inFinland(lat, lng)) {
     try {
       return await lookupDigitransit(lat, lng, opts.digitransitKey);
     } catch (e) {
-      console.error("digitransit lookup failed, trying OSM", e);
+      console.error("digitransit lookup failed, trying Transitous", e);
     }
+  }
+  try {
+    return await lookupTransitous(lat, lng);
+  } catch (e) {
+    console.error("transitous lookup failed, trying OSM", e);
   }
   return lookupOsm(lat, lng);
 }
