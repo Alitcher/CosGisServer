@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings } from "../types";
 import { requireAdmin, sessionSecret } from "../middleware/auth";
 import { signSession } from "../auth/session";
+import { listHistory, undoGroup, redoGroup, jumpTo } from "../services/history";
 import { adminCount, beginRegistration, finishRegistration, beginLogin, finishLogin } from "../auth/webauthn";
 import { d1EventsRepo } from "../repositories/events.repo";
 import { d1PlacesRepo } from "../repositories/places.repo";
@@ -44,7 +45,8 @@ export function adminController() {
     if (!body) return c.json({ error: "Invalid body" }, 400);
     const ok = await finishLogin(c.env, c.env.DB, body);
     if (!ok) return c.json({ error: "Login failed" }, 401);
-    return c.json({ token: await signSession(sessionSecret(c.env)) });
+    // sub: which passkey logged in, so Admin > History can show who made a change.
+    return c.json({ token: await signSession(sessionSecret(c.env), undefined, String(body.id ?? "").slice(0, 8) || undefined) });
   });
 
 
@@ -75,5 +77,24 @@ export function adminController() {
       return c.json({ error: "Transit lookup failed, try again or fill it in by hand" }, 502);
     }
   });
+  // ---------- history: undo / redo / jump (services/history.ts) ----------
+  routes.get("/v1/admin/history", requireAdmin, async (c) => {
+    const limit = Math.min(Math.max(Number(c.req.query("limit")) || 100, 1), 500);
+    return c.json(await listHistory(contentDb(c), limit));
+  });
+  routes.post("/v1/admin/history/:group/undo", requireAdmin, async (c) => {
+    const r = await undoGroup(contentDb(c), c.req.param("group"));
+    return r.ok ? c.json(r) : c.json(r, r.error === "Not found" ? 404 : 409);
+  });
+  routes.post("/v1/admin/history/:group/redo", requireAdmin, async (c) => {
+    const r = await redoGroup(contentDb(c), c.req.param("group"));
+    return r.ok ? c.json(r) : c.json(r, r.error === "Not found" ? 404 : 409);
+  });
+  // Make the data look like right after this action: later ones undone, earlier ones redone.
+  routes.post("/v1/admin/history/:group/jump", requireAdmin, async (c) => {
+    const r = await jumpTo(contentDb(c), c.req.param("group"));
+    return r.ok ? c.json(r) : c.json(r, 404);
+  });
+
   return routes;
 }

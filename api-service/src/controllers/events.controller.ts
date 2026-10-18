@@ -18,6 +18,7 @@ import { findDuplicateEvent, duplicateBody } from "../services/duplicates";
 import { syncLinkedEvents, ESPOO } from "../services/linkedevents";
 import { syncConit } from "../services/conit";
 import { syncOuluComics } from "../services/oulucomics";
+import { recorded } from "../services/history";
 
 // Admin updates may also change status (NewEvent omits it).
 const AdminUpdateSchema = UpdateEventSchema.extend({ status: StatusEnum.optional() });
@@ -47,6 +48,8 @@ export function eventsController() {
   // After a save: fill in the other languages in the background (services/translate.ts).
   const translate = (c: Context<{ Bindings: Bindings }>, item: Parameters<typeof translateInBackground>[2], refresh = false) =>
     translateInBackground(c, d1EventsRepo(contentDb(c)), item, refresh);
+  // Admin writes go into Admin > History (services/history.ts) so they can be undone.
+  const name = (row: Record<string, unknown> | null) => String(row?.name ?? "");
 
   // ---------- public reads ----------
   routes.get("/v1/events.geojson", async (c) => {
@@ -72,7 +75,8 @@ export function eventsController() {
   });
 
   routes.post("/v1/events/submissions/:id/approve", requireAdmin, async (c) => {
-    const event = await svc(c).approve(c.req.param("id"));
+    const id = c.req.param("id");
+    const event = await recorded(c, contentDb(c), "events", (r) => `Approve event: ${name(r)}`, [id], () => svc(c).approve(id));
     return event ? c.json(event) : c.json({ error: "Not found" }, 404);
   });
 
@@ -116,7 +120,7 @@ export function eventsController() {
     if (!parsed.success) return c.json({ error: "Invalid event", issues: parsed.error.issues }, 400);
     if (!priceRangeOk(parsed.data)) return c.json(BAD_PRICE, 400);
     if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
-    const event = await svc(c).create(parsed.data);
+    const event = await recorded(c, contentDb(c), "events", (r) => `Add event: ${name(r)}`, [], () => svc(c).create(parsed.data), (e) => e.id);
     translate(c, event);
     return c.json(event, 201);
   });
@@ -132,15 +136,17 @@ export function eventsController() {
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
     if (!priceRangeOk(parsed.data)) return c.json(BAD_PRICE, 400);
     if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
-    const before = await svc(c).get(c.req.param("id"));
-    const event = await svc(c).update(c.req.param("id"), parsed.data);
+    const id = c.req.param("id");
+    const before = await svc(c).get(id);
+    const event = await recorded(c, contentDb(c), "events", (r) => `Edit event: ${name(r)}`, [id], () => svc(c).update(id, parsed.data));
     // Original text changed: redo the auto translations (hand-written ones are kept).
     translate(c, event, !!before && !!event && (before.name !== event.name || before.description !== event.description));
     return event ? c.json(event) : c.json({ error: "Not found" }, 404);
   });
 
   routes.delete("/v1/events/:id", requireAdmin, async (c) => {
-    await svc(c).remove(c.req.param("id"));
+    const id = c.req.param("id");
+    await recorded(c, contentDb(c), "events", (r) => `Delete event: ${name(r)}`, [id], () => svc(c).remove(id));
     return c.json({ ok: true });
   });
 

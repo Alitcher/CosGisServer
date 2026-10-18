@@ -16,6 +16,7 @@ import { contentDb } from "../repositories/mirror";
 import { translateInBackground } from "../services/translate";
 import { placesService } from "../services/places.service";
 import { findDuplicatePlace, duplicateBody } from "../services/duplicates";
+import { recorded } from "../services/history";
 
 const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional() });
 const BAD_AGE = { error: "ageMax can't be lower than ageMin" } as const;
@@ -31,6 +32,8 @@ export function placesController() {
   // After a save: fill in the other languages in the background (services/translate.ts).
   const translate = (c: Context<{ Bindings: Bindings }>, item: Parameters<typeof translateInBackground>[2], refresh = false) =>
     translateInBackground(c, d1PlacesRepo(contentDb(c)), item, refresh);
+  // Admin writes go into Admin > History (services/history.ts) so they can be undone.
+  const name = (row: Record<string, unknown> | null) => String(row?.name ?? "");
 
   // ---------- public reads ----------
   routes.get("/v1/places.geojson", async (c) => {
@@ -55,7 +58,8 @@ export function placesController() {
   });
 
   routes.post("/v1/places/submissions/:id/approve", requireAdmin, async (c) => {
-    const place = await svc(c).approve(c.req.param("id"));
+    const id = c.req.param("id");
+    const place = await recorded(c, contentDb(c), "places", (r) => `Approve spot: ${name(r)}`, [id], () => svc(c).approve(id));
     return place ? c.json(place) : c.json({ error: "Not found" }, 404);
   });
 
@@ -79,7 +83,7 @@ export function placesController() {
     const parsed = NewPlaceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid place", issues: parsed.error.issues }, 400);
     if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
-    const place = await svc(c).create(parsed.data);
+    const place = await recorded(c, contentDb(c), "places", (r) => `Add spot: ${name(r)}`, [], () => svc(c).create(parsed.data), (p) => p.id);
     translate(c, place);
     return c.json(place, 201);
   });
@@ -94,15 +98,17 @@ export function placesController() {
     const parsed = AdminUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
     if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
-    const before = await svc(c).get(c.req.param("id"));
-    const place = await svc(c).update(c.req.param("id"), parsed.data);
+    const id = c.req.param("id");
+    const before = await svc(c).get(id);
+    const place = await recorded(c, contentDb(c), "places", (r) => `Edit spot: ${name(r)}`, [id], () => svc(c).update(id, parsed.data));
     // Original text changed: redo the auto translations (hand-written ones are kept).
     translate(c, place, !!before && !!place && (before.name !== place.name || before.description !== place.description));
     return place ? c.json(place) : c.json({ error: "Not found" }, 404);
   });
 
   routes.delete("/v1/places/:id", requireAdmin, async (c) => {
-    await svc(c).remove(c.req.param("id"));
+    const id = c.req.param("id");
+    await recorded(c, contentDb(c), "places", (r) => `Delete spot: ${name(r)}`, [id], () => svc(c).remove(id));
     return c.json({ ok: true });
   });
 

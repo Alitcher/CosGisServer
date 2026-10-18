@@ -31,9 +31,12 @@ function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** Mint a signed session token valid for `ttlSeconds` (default 12h). */
-export async function signSession(secret: string, ttlSeconds = 43200): Promise<string> {
-  const payload = toHex(enc.encode(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + ttlSeconds })));
+/**
+ * Mint a signed session token valid for `ttlSeconds` (default 12h). `sub` = which passkey
+ * logged in (start of its credential id), shown in Admin > History as who made a change.
+ */
+export async function signSession(secret: string, ttlSeconds = 43200, sub?: string): Promise<string> {
+  const payload = toHex(enc.encode(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + ttlSeconds, ...(sub ? { sub } : {}) })));
   const sig = toHex(await hmac(secret, payload));
   return `${payload}.${sig}`;
 }
@@ -50,5 +53,15 @@ export async function verifySession(secret: string, token: string): Promise<bool
     return typeof decoded.exp === "number" && decoded.exp > Math.floor(Date.now() / 1000);
   } catch {
     return false;
+  }
+}
+
+/** The `sub` inside a session token (no signature check: only call after requireAdmin). */
+export function sessionSubject(token: string): string | null {
+  try {
+    const decoded = JSON.parse(new TextDecoder().decode(fromHex(token.split(".")[0] ?? ""))) as { sub?: unknown };
+    return typeof decoded.sub === "string" ? decoded.sub : null;
+  } catch {
+    return null;
   }
 }
