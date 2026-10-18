@@ -125,8 +125,9 @@ const idFromUrl = (u?: string): string | null => u?.split("/").filter(Boolean).p
 
 /**
  * A recurring series -> ONE community event: name, place and text from the parent,
- * first upcoming meeting as `date` (with that meeting's times), the later meetings as
- * custom dates. Past meetings are left out. Null if the parent can't be mapped.
+ * the first meeting of this year as `date`, the later ones as custom dates (so the
+ * meetup page can list the whole year), times from the next meeting. Meetings from
+ * earlier years are left out. Null if the parent can't be mapped.
  */
 export function seriesToEventInput(parent: RawEvent, meetings: RawEvent[], inst: Instance = HELSINKI, today = localDate(new Date().toISOString())): Imported | null {
   const base = mapToEventInput(parent, inst);
@@ -136,12 +137,13 @@ export function seriesToEventInput(parent: RawEvent, meetings: RawEvent[], inst:
     .map((m) => ({ m, date: localDate(m.start_time!) }))
     .filter((x): x is { m: RawEvent; date: string } => !!x.date)
     .sort((x, y) => x.date.localeCompare(y.date));
-  const upcoming = starts.filter((x) => !today || x.date >= today);
-  const list = upcoming.length ? upcoming : starts;
+  const thisYear = starts.filter((x) => !today || x.date >= `${today.slice(0, 4)}-01-01`);
+  const list = thisYear.length ? thisYear : starts;
   const first = list[0];
+  const timesFrom = (today && list.find((x) => x.date >= today)) || first;
   const { endDate: _endDate, startTime: _startTime, endTime: _endTime, ...rest } = base;
-  const startTime = first?.m.start_time ? localTime(first.m.start_time) : base.startTime;
-  const endTime = first?.m.end_time ? localTime(first.m.end_time) : null;
+  const startTime = timesFrom?.m.start_time ? localTime(timesFrom.m.start_time) : base.startTime;
+  const endTime = timesFrom?.m.end_time ? localTime(timesFrom.m.end_time) : null;
   return {
     ...rest,
     date: first?.date ?? base.date,
@@ -174,8 +176,8 @@ async function fetchMeetings(inst: Instance, parentId: string): Promise<RawEvent
 }
 
 /**
- * Update a series we imported before: the first date moves to the next meeting and new
- * meetings are added to its custom dates (dates added by hand are kept).
+ * Update a series we imported before: the first date becomes the first meeting of this
+ * year and new meetings are added to its custom dates (dates added by hand are kept).
  * Left alone when an admin set a weekly / biweekly / monthly repeat by hand.
  */
 export function seriesPatch(existing: Event, input: Imported): Partial<EventInput> {
