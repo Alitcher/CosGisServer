@@ -7,6 +7,12 @@
  * Pulls cosplay/manga community events into our *pending* queue so an admin
  * approves the real ones (existing `POST /v1/events/submissions/:id/approve`).
  *
+ * Repeating meetups: Linked Events publishes them as a series - a parent event with
+ * `super_event_type: "recurring"` and one sub event per meeting (`super_event` points
+ * back). We import the PARENT once as a "community" event whose custom dates are the
+ * meeting dates, and skip the single meetings. Umbrella parents (festivals) and
+ * stand-alone events stay conventions.
+ *
  * Three guards keep us from re-downloading needlessly:
  *   1. Freshness  - skip the whole run if we synced < TTL ago (unless forced).
  *   2. Incremental - ask upstream only for events changed since our last sync.
@@ -14,6 +20,7 @@
  *
  * Data is CC BY 4.0 - attribute the city (e.g. "City of Helsinki, CC BY 4.0") where shown.
  */
+import type { Event } from "@anime-con/shared";
 import type { EventsRepo, EventInput } from "../repositories/events.repo";
 import { localDate, localTime } from "./helsinki-time";
 
@@ -53,6 +60,8 @@ type RawEvent = {
   start_time?: string | null;
   end_time?: string | null;
   last_modified_time?: string | null;
+  super_event_type?: string | null;         // "recurring" (a series of meetings) | "umbrella" (festival) | null
+  super_event?: { "@id"?: string } | null;  // set on each single meeting of a series
   location?: {
     name?: Localized;
     address_locality?: Localized;
@@ -108,6 +117,79 @@ export function mapToEventInput(
   };
 }
 
+type Imported = EventInput & { source: string; sourceId: string };
+const MAX_DATES = 60; // RecurrenceSchema limit
+
+/** Linked Events id from an API link, e.g. ".../event/helsinki:agpzf7zfcy/" -> "helsinki:agpzf7zfcy". */
+const idFromUrl = (u?: string): string | null => u?.split("/").filter(Boolean).pop() ?? null;
+
+/**
+ * A recurring series -> ONE community event: name, place and text from the parent,
+ * first upcoming meeting as `date` (with that meeting's times), the later meetings as
+ * custom dates. Past meetings are left out. Null if the parent can't be mapped.
+ */
+export function seriesToEventInput(parent: RawEvent, meetings: RawEvent[], inst: Instance = HELSINKI, today = localDate(new Date().toISOString())): Imported | null {
+  const base = mapToEventInput(parent, inst);
+  if (!base) return null;
+  const starts = meetings
+    .filter((m) => m.start_time)
+    .map((m) => ({ m, date: localDate(m.start_time!) }))
+    .filter((x): x is { m: RawEvent; date: string } => !!x.date)
+    .sort((x, y) => x.date.localeCompare(y.date));
+  const upcoming = starts.filter((x) => !today || x.date >= today);
+  const list = upcoming.length ? upcoming : starts;
+  const first = list[0];
+  const { endDate: _endDate, startTime: _startTime, endTime: _endTime, ...rest } = base;
+  const startTime = first?.m.start_time ? localTime(first.m.start_time) : base.startTime;
+  const endTime = first?.m.end_time ? localTime(first.m.end_time) : null;
+  return {
+    ...rest,
+    date: first?.date ?? base.date,
+    ...(startTime ? { startTime } : {}),
+    ...(endTime ? { endTime } : {}),
+    kind: "community",
+    recurrence: { freq: "custom", dates: [...new Set(list.slice(1).map((x) => x.date))].slice(0, MAX_DATES) },
+  };
+}
+
+async function getJson<T>(url: string, inst: Instance): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Linked Events (${inst.label}) ${url} -> HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+/** One event with its place. */
+const fetchEvent = (inst: Instance, id: string) => getJson<RawEvent>(`${inst.base}${encodeURIComponent(id)}/?include=location`, inst);
+
+/** Every meeting (sub event) of a series, soonest first. */
+async function fetchMeetings(inst: Instance, parentId: string): Promise<RawEvent[]> {
+  let url: string | null = `${inst.base}?${new URLSearchParams({ super_event: parentId, page_size: "100", sort: "start_time" })}`;
+  const out: RawEvent[] = [];
+  for (let page = 0; url && page < MAX_PAGES; page++) {
+    const json: { data?: RawEvent[]; meta?: { next?: string | null } } = await getJson(url, inst);
+    out.push(...(json.data ?? []));
+    url = json.meta?.next ?? null;
+  }
+  return out;
+}
+
+/**
+ * Update a series we imported before: the first date moves to the next meeting and new
+ * meetings are added to its custom dates (dates added by hand are kept).
+ * Left alone when an admin set a weekly / biweekly / monthly repeat by hand.
+ */
+export function seriesPatch(existing: Event, input: Imported): Partial<EventInput> {
+  const r = existing.recurrence;
+  if (r && r.freq !== "custom") return {};
+  const date = input.date;
+  const dates = [...new Set([...(r?.dates ?? []), ...(input.recurrence?.dates ?? [])])]
+    .filter((d) => d > date)
+    .sort()
+    .slice(0, MAX_DATES);
+  const same = existing.kind === "community" && existing.date === date && JSON.stringify(r?.dates ?? []) === JSON.stringify(dates);
+  return same ? {} : { kind: "community", date, recurrence: { ...(r ?? {}), freq: "custom", dates } };
+}
+
 /** Fetch raw events for one keyword, following pagination up to MAX_PAGES. */
 async function fetchKeyword(inst: Instance, keyword: string, sinceIso: string | null): Promise<RawEvent[]> {
   const params = new URLSearchParams({
@@ -135,6 +217,7 @@ export type SyncResult = {
   fetched: number;
   created: number;
   duplicates: number;
+  series: number;  // repeating meetups (Linked Events series) imported or refreshed as one community event
   ignored: number; // out of region / unmappable
   lastModified: string | null;
 };
@@ -158,7 +241,7 @@ export async function syncLinkedEvents(
   if (!opts.force && state?.last_run) {
     const age = Date.now() - Date.parse(state.last_run);
     if (Number.isFinite(age) && age < FRESH_TTL_MS) {
-      return { skipped: "fresh", fetched: 0, created: 0, duplicates: 0, ignored: 0, lastModified: state.last_modified ?? null };
+      return { skipped: "fresh", fetched: 0, created: 0, duplicates: 0, series: 0, ignored: 0, lastModified: state.last_modified ?? null };
     }
   }
 
@@ -169,8 +252,16 @@ export async function syncLinkedEvents(
 
   let created = 0,
     duplicates = 0,
+    series = 0,
     ignored = 0,
     maxModified = since;
+  // Series parents: fetched once per run (several meetings point to the same one).
+  const parents = new Map<string, RawEvent | null>();
+  const parentOf = async (id: string) => {
+    if (!parents.has(id)) parents.set(id, await fetchEvent(inst, id).catch(() => null));
+    return parents.get(id) ?? null;
+  };
+  const doneSeries = new Set<string>();
 
   // Dedup within this batch (a con can match both 'cosplay' and 'manga').
   const seen = new Set<string>();
@@ -180,6 +271,28 @@ export async function syncLinkedEvents(
     }
     if (seen.has(e.id)) continue;
     seen.add(e.id);
+
+    // Part of a repeating series? Then import the series (once), not this single meeting.
+    const parentId = e.super_event_type === "recurring" ? e.id : idFromUrl(e.super_event?.["@id"]);
+    const parent = parentId ? (parentId === e.id ? e : await parentOf(parentId)) : null;
+    if (parentId && parent?.super_event_type === "recurring") {
+      if (doneSeries.has(parentId)) continue;
+      doneSeries.add(parentId);
+      const sInput = seriesToEventInput(parent.location ? parent : ((await parentOf(parentId)) ?? parent), await fetchMeetings(inst, parentId), inst);
+      if (!sInput) {
+        ignored++;
+        continue;
+      }
+      const old = await repo.findBySourceId(sInput.source, sInput.sourceId);
+      if (old) {
+        const patch = seriesPatch(old, sInput);
+        if (Object.keys(patch).length) await repo.update(old.id, patch);
+      } else {
+        await repo.create(sInput);
+      }
+      series++;
+      continue;
+    }
 
     const input = mapToEventInput(e, inst);
     if (!input) {
@@ -213,5 +326,5 @@ export async function syncLinkedEvents(
     .bind(inst.key, now, maxModified)
     .run();
 
-  return { fetched: raw.length, created, duplicates, ignored, lastModified: maxModified };
+  return { fetched: raw.length, created, duplicates, series, ignored, lastModified: maxModified };
 }

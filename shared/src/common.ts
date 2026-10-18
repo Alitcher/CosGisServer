@@ -72,6 +72,27 @@ export const PriceEur = z.number().min(0).max(10000);
 export const AgeYear = z.number().int().min(0).max(99);
 export const AgeYears = AgeYear.nullable();
 
+/**
+ * convention = a dated event (cons, contests, one-off meetups).
+ * community = a local get-together that repeats (cosplay cafe, library workshop): see RecurrenceSchema.
+ */
+export const EventKindEnum = z.enum(['convention', 'community']);
+export type EventKind = z.infer<typeof EventKindEnum>;
+
+/**
+ * How a community meetup repeats. The weekday comes from the event's `date` (the first meeting).
+ * weekly / biweekly = every 1 / 2 weeks; monthly = the `nth` weekday of each month (-1 = last);
+ * custom = only on the listed `dates` (plus `date`). `until` = last possible day (missing = no end).
+ */
+export const RecurrenceSchema = z.object({
+  freq: z.enum(['weekly', 'biweekly', 'monthly', 'custom']),
+  nth: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(-1)]).optional(),
+  dates: z.array(IsoDate).max(60).optional(),
+  until: IsoDate.optional(),
+  note: z.string().max(160).optional(), // e.g. "Check Instagram for the exact day"
+});
+export type Recurrence = z.infer<typeof RecurrenceSchema>;
+
 /** An age range must not run backwards ("from 17 to 7"). */
 export const ageRangeOk = (e: { ageMin?: number | null; ageMax?: number | null }) =>
   e.ageMin == null || e.ageMax == null || e.ageMax >= e.ageMin;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema, AdmissionEnum, PriceEur, AgeYear, AgeYears } from './common';
+import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema, AdmissionEnum, PriceEur, AgeYear, AgeYears, EventKindEnum, RecurrenceSchema } from './common';
 
 /** A dated anime convention plotted on the map. */
 export const EventSchema = z.object({
@@ -30,6 +30,10 @@ export const EventSchema = z.object({
   /** Suggested ages, e.g. 7-17 for a kids' workshop. Only one = "7+" / "up to 12". */
   ageMin: AgeYears.optional(),
   ageMax: AgeYears.optional(),
+  /** convention (default when missing) or community (repeating local meetup). */
+  kind: EventKindEnum.optional(),
+  /** How a community meetup repeats. null on an update clears it. */
+  recurrence: RecurrenceSchema.nullable().optional(),
   /** Nearby metro/train/tram/bus stops. Admin-only, see TransitSchema. */
   transit: TransitSchema.optional(),
   startTime: LocalTime.optional(),    // doors open on `date`

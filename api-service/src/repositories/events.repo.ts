@@ -11,6 +11,17 @@ export function parseI18n(v: unknown): I18n | undefined {
   }
 }
 
+/** recurrence JSON column -> object (NULL or bad JSON = does not repeat). */
+export function parseRecurrence(v: unknown): Event["recurrence"] {
+  if (v == null || v === "") return undefined;
+  try {
+    const o = JSON.parse(String(v));
+    return o && typeof o === "object" && !Array.isArray(o) ? (o as Event["recurrence"]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** transit JSON column -> array (NULL = never checked, bad JSON = treated the same). */
 export function parseTransit(v: unknown): Transit | undefined {
   if (v == null || v === "") return undefined;
@@ -51,6 +62,8 @@ export type EventInput = {
   priceNote?: string;
   ageMin?: number | null; // suggested ages, null clears
   ageMax?: number | null;
+  kind?: Event["kind"];             // convention | community
+  recurrence?: Event["recurrence"]; // stored as JSON, null clears
   startTime?: string; // local 'HH:MM'
   endTime?: string;   // local 'HH:MM'
   status?: Event["status"];
@@ -92,6 +105,8 @@ function rowToEvent(r: Record<string, unknown>): Event {
     priceNote: r.price_note == null ? undefined : String(r.price_note),
     ageMin: r.age_min == null ? undefined : Number(r.age_min),
     ageMax: r.age_max == null ? undefined : Number(r.age_max),
+    kind: r.kind == null ? undefined : (r.kind as Event["kind"]),
+    recurrence: parseRecurrence(r.recurrence),
     startTime: r.start_time == null ? undefined : String(r.start_time),
     endTime: r.end_time == null ? undefined : String(r.end_time),
     status: r.status as Event["status"],
@@ -104,7 +119,7 @@ const COLUMNS: Array<[keyof EventInput, string]> = [
   ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["lang", "lang"], ["i18n", "i18n"], ["transit", "transit"], ["date", "date"], ["endDate", "end_date"],
   ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
   ["admission", "admission"], ["priceMin", "price_min"], ["priceMax", "price_max"], ["priceNote", "price_note"],
-  ["ageMin", "age_min"], ["ageMax", "age_max"],
+  ["ageMin", "age_min"], ["ageMax", "age_max"], ["kind", "kind"], ["recurrence", "recurrence"],
   ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
 
@@ -133,7 +148,7 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,admission,price_min,price_max,price_note,age_min,age_max,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,admission,price_min,price_max,price_note,age_min,age_max,kind,recurrence,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.venue, input.city, input.country ?? "FI", input.lang ?? null,
@@ -141,7 +156,8 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
           input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
           input.description ?? null, input.url ?? null, input.image ?? null,
           input.admission ?? null, input.priceMin ?? null, input.priceMax ?? null, input.priceNote ?? null,
-          input.ageMin ?? null, input.ageMax ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          input.ageMin ?? null, input.ageMax ?? null,
+          input.kind ?? null, input.recurrence ? JSON.stringify(input.recurrence) : null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
         )
         .run();
@@ -161,7 +177,7 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const vals: unknown[] = [];
       for (const [key, col] of COLUMNS) {
         const v = patch[key];
-        if (v !== undefined) { sets.push(`${col} = ?`); vals.push(key === "i18n" || key === "transit" ? JSON.stringify(v) : v); }
+        if (v !== undefined) { sets.push(`${col} = ?`); vals.push((key === "i18n" || key === "transit" || key === "recurrence") && v !== null ? JSON.stringify(v) : v); }
       }
       if (sets.length > 0) {
         vals.push(id);
