@@ -11,7 +11,8 @@
  * `super_event_type: "recurring"` and one sub event per meeting (`super_event` points
  * back). We import the PARENT once as a "community" event whose custom dates are the
  * meeting dates, and skip the single meetings. Umbrella parents (festivals) and
- * stand-alone events stay conventions.
+ * stand-alone events stay conventions. Two series with the same name at the same venue
+ * (e.g. two library groups an hour apart) are combined into one meetup with two time slots.
  *
  * Three guards keep us from re-downloading needlessly:
  *   1. Freshness  - skip the whole run if we synced < TTL ago (unless forced).
@@ -192,6 +193,38 @@ export function seriesPatch(existing: Event, input: Imported): Partial<EventInpu
   return same ? {} : { kind: "community", date, recurrence: { ...(r ?? {}), freq: "custom", dates } };
 }
 
+type Slot = NonNullable<NonNullable<Event["recurrence"]>["slots"]>[number];
+const sameText = (x?: string, y?: string) => (x ?? "").trim().toLowerCase() === (y ?? "").trim().toLowerCase();
+
+/** Same meetup published as another series: same name, venue and city, already a community row. */
+export const isSibling = (e: Event, input: Imported) =>
+  e.kind === "community" && e.status !== "draft" && sameText(e.name, input.name) && sameText(e.venue, input.venue) && sameText(e.city, input.city);
+
+/**
+ * Combine another series of the same meetup into an existing row: its time becomes an extra
+ * slot (the row's own time is slot 1), meeting dates are merged, and the card time spans all
+ * slots (earliest start, latest end). Hand-set weekly / monthly repeats keep their dates.
+ */
+export function mergeSeries(existing: Event, input: Imported): Partial<EventInput> {
+  const r = existing.recurrence ?? { freq: "custom" as const, dates: [] };
+  const own: Slot[] = r.slots ?? (existing.startTime ? [{ start: existing.startTime, ...(existing.endTime ? { end: existing.endTime } : {}) }] : []);
+  const add: Slot[] = input.startTime ? [{ start: input.startTime, ...(input.endTime ? { end: input.endTime } : {}) }] : [];
+  const key = (s: Slot) => `${s.start}|${s.end ?? ""}|${(s.venue ?? "").toLowerCase()}`;
+  const slots = [...new Map([...own, ...add].map((s) => [key(s), s])).values()].sort((x, y) => x.start.localeCompare(y.start)).slice(0, 10);
+  const date = r.freq === "custom" && input.date < existing.date ? input.date : existing.date;
+  const dates = r.freq === "custom"
+    ? [...new Set([existing.date, ...(r.dates ?? []), input.date, ...(input.recurrence?.dates ?? [])])].filter((d) => d > date).sort().slice(0, MAX_DATES)
+    : r.dates;
+  const ends = slots.map((s) => s.end).filter((x): x is string => !!x).sort();
+  const patch: Partial<EventInput> = {
+    date,
+    recurrence: { ...r, ...(dates ? { dates } : {}), slots },
+    ...(slots[0] ? { startTime: slots[0].start } : {}),
+    ...(ends.length ? { endTime: ends[ends.length - 1] } : {}),
+  };
+  return JSON.stringify(existing.recurrence) === JSON.stringify(patch.recurrence) && existing.date === date ? {} : patch;
+}
+
 /** Fetch raw events for one keyword, following pagination up to MAX_PAGES. */
 async function fetchKeyword(inst: Instance, keyword: string, sinceIso: string | null): Promise<RawEvent[]> {
   const params = new URLSearchParams({
@@ -264,6 +297,7 @@ export async function syncLinkedEvents(
     return parents.get(id) ?? null;
   };
   const doneSeries = new Set<string>();
+  let rowsCache: Event[] | null = null; // all rows, loaded once when a series needs a sibling check
 
   // Dedup within this batch (a con can match both 'cosplay' and 'manga').
   const seen = new Set<string>();
@@ -290,7 +324,18 @@ export async function syncLinkedEvents(
         const patch = seriesPatch(old, sInput);
         if (Object.keys(patch).length) await repo.update(old.id, patch);
       } else {
-        await repo.create(sInput);
+        rowsCache ??= await repo.list();
+        const sibling = rowsCache.find((r) => isSibling(r, sInput));
+        if (sibling) {
+          const patch = mergeSeries(sibling, sInput);
+          if (Object.keys(patch).length) {
+            const merged = await repo.update(sibling.id, patch);
+            if (merged) rowsCache = rowsCache.map((r) => (r.id === merged.id ? merged : r));
+          }
+        } else {
+          const made = await repo.create(sInput);
+          rowsCache.push(made);
+        }
       }
       series++;
       continue;

@@ -7,7 +7,9 @@
 //     imported) becomes kind = community, date = first meeting of this year, later meetings
 //     = custom dates (the meetup page lists the whole year), times from the next meeting;
 //     it goes live if any of its meetings was already live, otherwise it stays pending;
-//   - the single-meeting rows are set to draft (hidden, NOT deleted).
+//   - the single-meeting rows are set to draft (hidden, NOT deleted);
+//   - series with the same name, venue and city (e.g. two library groups an hour apart) are
+//     combined into one meetup with a time slot per group; the other series rows go to draft.
 //
 //   node scripts/fix-series.ts --remote            print the plan, change nothing
 //   node scripts/fix-series.ts --remote --write    ...and save to production
@@ -37,11 +39,11 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const wrangler = (cmd: string) =>
   execSync(`npx wrangler ${cmd}`, { cwd: root, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, CI: "1" } }).toString();
 
-type Row = { id: string; name: string; date: string; status: string; source: string; source_id: string };
+type Row = { id: string; name: string; venue: string; city: string; date: string; status: string; source: string; source_id: string };
 type Raw = { id: string; start_time?: string | null; end_time?: string | null; super_event_type?: string | null; super_event?: { "@id"?: string } | null };
 
 const out = wrangler(
-  `d1 execute ${DB} ${target} --json --command "SELECT id, name, date, status, source, source_id FROM events WHERE source IN ('linkedevents','linkedevents-espoo') AND status IN ('pending','live') AND source_id IS NOT NULL"`,
+  `d1 execute ${DB} ${target} --json --command "SELECT id, name, venue, city, date, status, source, source_id FROM events WHERE source IN ('linkedevents','linkedevents-espoo') AND status IN ('pending','live') AND source_id IS NOT NULL"`,
 );
 const rows = (JSON.parse(out) as Array<{ results: Row[] }>)[0].results;
 
@@ -91,6 +93,9 @@ for (const r of rows) {
 
 const sqlText = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const statements: string[] = [];
+type Slot = { start: string; end?: string };
+type Plan = { keep: Row; parentId: string; first: string; dates: string[]; slot: Slot; status: string; drafts: Row[] };
+const plans: Plan[] = [];
 for (const [key, g] of groups) {
   const parentId = key.split("|")[1];
   const list = (await meetings(g.base, parentId))
@@ -109,16 +114,34 @@ for (const [key, g] of groups) {
     g.rows.find((r) => r.source_id === first.m.id) ??
     g.rows.slice().sort((a, b) => a.date.localeCompare(b.date))[0];
   const status = g.rows.some((r) => r.status === "live") ? "live" : keep.status;
-  const recurrence = JSON.stringify({ freq: "custom", dates });
-  console.log(`\n${keep.name}  (${g.rows.length} rows, series ${parentId})`);
-  console.log(`  keep ${keep.id}: community, from ${first.date}, next ${nextMeeting.date}, ${dates.length} more dates, ${status}`);
+  const slot: Slot = { start: localTime(nextMeeting.m.start_time!), ...(nextMeeting.m.end_time ? { end: localTime(nextMeeting.m.end_time) } : {}) };
+  plans.push({ keep, parentId, first: first.date, dates, slot, status, drafts: g.rows.filter((r) => r.id !== keep.id) });
+}
+
+// Same meetup published as several series (same name, venue, city): one row, a slot per series.
+const norm = (s: string) => s.trim().toLowerCase();
+const byMeetup = new Map<string, Plan[]>();
+for (const p of plans) {
+  const k = [p.keep.name, p.keep.venue, p.keep.city].map(norm).join("|");
+  byMeetup.set(k, [...(byMeetup.get(k) ?? []), p]);
+}
+for (const group of byMeetup.values()) {
+  const main = group.find((p) => p.status === "live") ?? group[0];
+  const first = group.map((p) => p.first).sort()[0];
+  const dates = [...new Set(group.flatMap((p) => [p.first, ...p.dates]))].filter((d) => d > first).sort().slice(0, MAX_DATES);
+  const slots = [...new Map(group.map((p) => [`${p.slot.start}|${p.slot.end ?? ""}`, p.slot])).values()].sort((x, y) => x.start.localeCompare(y.start));
+  const ends = slots.map((s) => s.end).filter((x): x is string => !!x).sort();
+  const status = group.some((p) => p.status === "live") ? "live" : main.status;
+  const recurrence = JSON.stringify({ freq: "custom", dates, ...(slots.length > 1 ? { slots } : {}) });
+  console.log(`\n${main.keep.name}  (${group.length} series, ${group.reduce((n, p) => n + 1 + p.drafts.length, 0)} rows)`);
+  console.log(`  keep ${main.keep.id}: community, from ${first}, ${dates.length} more dates, ${slots.map((s) => `${s.start}-${s.end ?? ""}`).join(" + ")}, ${status}`);
   statements.push(
-    `UPDATE events SET kind='community', date=${sqlText(first.date)}, end_date=NULL, ` +
-      `start_time=${sqlText(localTime(nextMeeting.m.start_time!))}, end_time=${nextMeeting.m.end_time ? sqlText(localTime(nextMeeting.m.end_time)) : "end_time"}, ` +
-      `recurrence=${sqlText(recurrence)}, status=${sqlText(status)}, source_id=${sqlText(parentId)} WHERE id=${sqlText(keep.id)};`,
+    `UPDATE events SET kind='community', date=${sqlText(first)}, end_date=NULL, ` +
+      `start_time=${sqlText(slots[0].start)}, end_time=${ends.length ? sqlText(ends[ends.length - 1]) : "end_time"}, ` +
+      `recurrence=${sqlText(recurrence)}, status=${sqlText(status)}, source_id=${sqlText(main.parentId)} WHERE id=${sqlText(main.keep.id)};`,
   );
-  for (const r of g.rows) {
-    if (r.id === keep.id) continue;
+  const drafts = group.flatMap((p) => (p === main ? p.drafts : [p.keep, ...p.drafts]));
+  for (const r of drafts) {
     console.log(`  draft ${r.id}: ${r.date} (${r.status})`);
     statements.push(`UPDATE events SET status='draft' WHERE id=${sqlText(r.id)};`);
   }

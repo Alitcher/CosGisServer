@@ -90,6 +90,11 @@ export const RecurrenceSchema = z.object({
   dates: z.array(IsoDate).max(60).optional(),
   until: IsoDate.optional(),
   note: z.string().max(160).optional(), // e.g. "Check Instagram for the exact day"
+  /**
+   * Groups on each meeting day, e.g. two library groups 14:30-15:30 and 15:30-16:30, or
+   * one group elsewhere (`venue`). Missing = one group at the event's own times and venue.
+   */
+  slots: z.array(z.object({ start: LocalTime, end: LocalTime.optional(), venue: z.string().max(120).optional() })).max(10).optional(),
 });
 export type Recurrence = z.infer<typeof RecurrenceSchema>;
 
