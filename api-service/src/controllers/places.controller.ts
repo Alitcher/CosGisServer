@@ -5,6 +5,7 @@ import {
   PlaceSubmissionSchema,
   StatusEnum,
   PurposeEnum,
+  ageRangeOk,
   placesToFeatureCollection,
 } from "@anime-con/shared";
 import type { Bindings } from "../types";
@@ -17,6 +18,7 @@ import { placesService } from "../services/places.service";
 import { findDuplicatePlace, duplicateBody } from "../services/duplicates";
 
 const AdminUpdateSchema = UpdatePlaceSchema.extend({ status: StatusEnum.optional() });
+const BAD_AGE = { error: "ageMax can't be lower than ageMin" } as const;
 
 /**
  * HTTP layer for places - mirrors the events controller. Submissions live at
@@ -39,6 +41,7 @@ export function placesController() {
   routes.post("/v1/places/submissions", submissionQuota, async (c) => {
     const parsed = PlaceSubmissionSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid submission", issues: parsed.error.issues }, 400);
+    if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
     // Same address, within 50 m, same name, link or photo as anything stored = duplicate.
     const dup = findDuplicatePlace(await d1PlacesRepo(contentDb(c)).list(), parsed.data);
     if (dup) return c.json(duplicateBody("spot", dup), 409);
@@ -75,6 +78,7 @@ export function placesController() {
   routes.post("/v1/places", requireAdmin, async (c) => {
     const parsed = NewPlaceSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid place", issues: parsed.error.issues }, 400);
+    if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
     const place = await svc(c).create(parsed.data);
     translate(c, place);
     return c.json(place, 201);
@@ -89,6 +93,7 @@ export function placesController() {
   routes.put("/v1/places/:id", requireAdmin, async (c) => {
     const parsed = AdminUpdateSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Invalid update", issues: parsed.error.issues }, 400);
+    if (!ageRangeOk(parsed.data)) return c.json(BAD_AGE, 400);
     const before = await svc(c).get(c.req.param("id"));
     const place = await svc(c).update(c.req.param("id"), parsed.data);
     // Original text changed: redo the auto translations (hand-written ones are kept).

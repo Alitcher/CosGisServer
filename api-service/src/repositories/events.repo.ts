@@ -49,6 +49,8 @@ export type EventInput = {
   priceMin?: number;  // EUR
   priceMax?: number;  // EUR
   priceNote?: string;
+  ageMin?: number | null; // suggested ages, null clears
+  ageMax?: number | null;
   startTime?: string; // local 'HH:MM'
   endTime?: string;   // local 'HH:MM'
   status?: Event["status"];
@@ -88,6 +90,8 @@ function rowToEvent(r: Record<string, unknown>): Event {
     priceMin: r.price_min == null ? undefined : Number(r.price_min),
     priceMax: r.price_max == null ? undefined : Number(r.price_max),
     priceNote: r.price_note == null ? undefined : String(r.price_note),
+    ageMin: r.age_min == null ? undefined : Number(r.age_min),
+    ageMax: r.age_max == null ? undefined : Number(r.age_max),
     startTime: r.start_time == null ? undefined : String(r.start_time),
     endTime: r.end_time == null ? undefined : String(r.end_time),
     status: r.status as Event["status"],
@@ -100,6 +104,7 @@ const COLUMNS: Array<[keyof EventInput, string]> = [
   ["name", "name"], ["venue", "venue"], ["city", "city"], ["country", "country"], ["lang", "lang"], ["i18n", "i18n"], ["transit", "transit"], ["date", "date"], ["endDate", "end_date"],
   ["lng", "lng"], ["lat", "lat"], ["description", "description"], ["url", "url"], ["image", "image"],
   ["admission", "admission"], ["priceMin", "price_min"], ["priceMax", "price_max"], ["priceNote", "price_note"],
+  ["ageMin", "age_min"], ["ageMax", "age_max"],
   ["startTime", "start_time"], ["endTime", "end_time"], ["status", "status"],
 ];
 
@@ -128,14 +133,15 @@ export function d1EventsRepo(db: D1Database): EventsRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,admission,price_min,price_max,price_note,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO events (id,name,venue,city,country,lang,i18n,transit,date,end_date,start_time,end_time,lng,lat,description,url,image,admission,price_min,price_max,price_note,age_min,age_max,status,submitted_by,source,source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.venue, input.city, input.country ?? "FI", input.lang ?? null,
           input.i18n ? JSON.stringify(input.i18n) : null, input.transit ? JSON.stringify(input.transit) : null, input.date, input.endDate ?? null,
           input.startTime ?? null, input.endTime ?? null, input.lng, input.lat,
           input.description ?? null, input.url ?? null, input.image ?? null,
-          input.admission ?? null, input.priceMin ?? null, input.priceMax ?? null, input.priceNote ?? null, input.status ?? "draft", input.submittedBy ?? null,
+          input.admission ?? null, input.priceMin ?? null, input.priceMax ?? null, input.priceNote ?? null,
+          input.ageMin ?? null, input.ageMax ?? null, input.status ?? "draft", input.submittedBy ?? null,
           input.source ?? null, input.sourceId ?? null,
         )
         .run();

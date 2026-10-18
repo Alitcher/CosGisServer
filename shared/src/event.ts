@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema, AdmissionEnum, PriceEur } from './common';
+import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, IsoDate, LocalTime, Longitude, Latitude, TransitSchema, AdmissionEnum, PriceEur, AgeYear, AgeYears } from './common';
 
 /** A dated anime convention plotted on the map. */
 export const EventSchema = z.object({
@@ -27,6 +27,9 @@ export const EventSchema = z.object({
   priceMin: PriceEur.optional(),
   priceMax: PriceEur.optional(),
   priceNote: z.string().max(160).optional(), // e.g. "Day ticket 15, weekend 25, under 7 free"
+  /** Suggested ages, e.g. 7-17 for a kids' workshop. Only one = "7+" / "up to 12". */
+  ageMin: AgeYears.optional(),
+  ageMax: AgeYears.optional(),
   /** Nearby metro/train/tram/bus stops. Admin-only, see TransitSchema. */
   transit: TransitSchema.optional(),
   startTime: LocalTime.optional(),    // doors open on `date`
@@ -44,8 +47,9 @@ export type NewEvent = z.infer<typeof NewEventSchema>;
 export const UpdateEventSchema = NewEventSchema.partial();
 export type UpdateEvent = z.infer<typeof UpdateEventSchema>;
 
-/** Community-submitted event (lands in the pending queue). `transit` is admin-only. */
+/** Community-submitted event (lands in the pending queue). `transit` is admin-only; the youngest suggested age is required. */
 export const EventSubmissionSchema = NewEventSchema.omit({ transit: true }).extend({
+  ageMin: AgeYear,
   submittedBy: z.string().min(1).max(60).optional(),
 });
 export type EventSubmission = z.infer<typeof EventSubmissionSchema>;

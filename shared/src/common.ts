@@ -65,6 +65,17 @@ export type Admission = z.infer<typeof AdmissionEnum>;
 /** A price in euros (whole or cents), e.g. 15 or 12.5. */
 export const PriceEur = z.number().min(0).max(10000);
 
+/**
+ * Suggested age in whole years (ageMin / ageMax on events and places), e.g. a kids'
+ * workshop for 7-17. null on an update clears it; missing = not known.
+ */
+export const AgeYear = z.number().int().min(0).max(99);
+export const AgeYears = AgeYear.nullable();
+
+/** An age range must not run backwards ("from 17 to 7"). */
+export const ageRangeOk = (e: { ageMin?: number | null; ageMax?: number | null }) =>
+  e.ageMin == null || e.ageMax == null || e.ageMax >= e.ageMin;
+
 /** Kinds of public transport stop shown next to an event or place. */
 export const TransitKindEnum = z.enum(['metro', 'train', 'tram', 'bus']);
 export type TransitKind = z.infer<typeof TransitKindEnum>;

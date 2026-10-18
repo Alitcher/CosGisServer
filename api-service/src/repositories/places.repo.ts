@@ -23,6 +23,8 @@ export type PlaceInput = {
   photos: Place["photos"];
   description?: string;
   openingHours?: string;
+  ageMin?: number | null; // suggested ages, null clears
+  ageMax?: number | null;
   booking?: Place["booking"];
   price?: Place["price"];
   priceNote?: string;
@@ -59,6 +61,8 @@ function rowToPlace(r: Record<string, unknown>): Place {
     photos: JSON.parse(String(r.photos ?? "[]")) as Place["photos"],
     description: r.description == null ? undefined : String(r.description),
     openingHours: r.opening_hours == null ? undefined : String(r.opening_hours),
+    ageMin: r.age_min == null ? undefined : Number(r.age_min),
+    ageMax: r.age_max == null ? undefined : Number(r.age_max),
     booking: r.booking == null ? undefined : (r.booking as Place["booking"]),
     price: r.price == null ? undefined : (r.price as Place["price"]),
     priceNote: r.price_note == null ? undefined : String(r.price_note),
@@ -86,6 +90,8 @@ const FIELDS: Array<{ key: keyof PlaceInput; col: string; json?: boolean; bool?:
   { key: "photos", col: "photos", json: true },
   { key: "description", col: "description" },
   { key: "openingHours", col: "opening_hours" },
+  { key: "ageMin", col: "age_min" },
+  { key: "ageMax", col: "age_max" },
   { key: "booking", col: "booking" },
   { key: "price", col: "price" },
   { key: "priceNote", col: "price_note" },
@@ -127,7 +133,7 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
       const id = crypto.randomUUID();
       await db
         .prepare(
-          "INSERT INTO places (id,name,type,city,country,lang,i18n,transit,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          "INSERT INTO places (id,name,type,city,country,lang,i18n,transit,address,lng,lat,themes,photos,description,opening_hours,booking,price,price_note,facilities,youth_friendly,booking_url,age_min,age_max,status,submitted_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )
         .bind(
           id, input.name, input.type, input.city, input.country ?? "FI", input.lang ?? null,
@@ -138,6 +144,7 @@ export function d1PlacesRepo(db: D1Database): PlacesRepo {
           JSON.stringify(input.facilities ?? []),
           input.youthFriendly == null ? null : input.youthFriendly ? 1 : 0,
           input.bookingUrl ?? null,
+          input.ageMin ?? null, input.ageMax ?? null,
           input.status ?? "draft", input.submittedBy ?? null,
         )
         .run();

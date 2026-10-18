@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, HttpUrl, Longitude, Latitude, TransitSchema } from './common';
+import { CityName, CountryEnum, LangEnum, I18nSchema, StatusEnum, HttpUrl, Longitude, Latitude, TransitSchema, AgeYear, AgeYears } from './common';
 
 /** Kind of cosplay-friendly place. Extensible. */
 export const PlaceTypeEnum = z.enum([
@@ -58,6 +58,9 @@ export const PlaceSchema = z.object({
   openingHours: z.string().max(200).optional(),
   /** Nearby metro/train/tram/bus stops. Admin-only, see TransitSchema. */
   transit: TransitSchema.optional(),
+  /** Suggested ages, e.g. 7-17. Only one = "7+" / "up to 12". */
+  ageMin: AgeYears.optional(),
+  ageMax: AgeYears.optional(),
   // ---- practice places only (dance-studio / practice-space) ----
   booking: BookingEnum.optional(),
   price: PriceEnum.optional(),
@@ -81,8 +84,9 @@ export type NewPlace = z.infer<typeof NewPlaceSchema>;
 export const UpdatePlaceSchema = NewPlaceSchema.partial();
 export type UpdatePlace = z.infer<typeof UpdatePlaceSchema>;
 
-/** Community-submitted place (lands in the pending queue). `youthFriendly` and `transit` are admin-only. */
+/** Community-submitted place (lands in the pending queue). `youthFriendly` and `transit` are admin-only; the youngest suggested age is required. */
 export const PlaceSubmissionSchema = NewPlaceSchema.omit({ youthFriendly: true, transit: true }).extend({
+  ageMin: AgeYear,
   submittedBy: z.string().min(1).max(60).optional(),
 });
 export type PlaceSubmission = z.infer<typeof PlaceSubmissionSchema>;
