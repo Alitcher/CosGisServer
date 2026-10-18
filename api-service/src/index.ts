@@ -4,6 +4,7 @@ import type { Bindings } from "./types";
 import { eventsController } from "./controllers/events.controller";
 import { placesController } from "./controllers/places.controller";
 import { adminController } from "./controllers/admin.controller";
+import { imageController } from "./controllers/image.controller";
 import { d1EventsRepo } from "./repositories/events.repo";
 import { d1PlacesRepo } from "./repositories/places.repo";
 import { translateMissing } from "./services/translate";
@@ -51,6 +52,7 @@ app.get("/health", (c) => c.json({ ok: true, service: "api-service" }));
 app.route("/", eventsController());
 app.route("/", placesController());
 app.route("/", adminController());
+app.route("/", imageController()); // picture relay for "Share as picture"
 
 export default {
   fetch: app.fetch,
