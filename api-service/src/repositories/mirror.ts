@@ -2,7 +2,7 @@ import type { Context } from "hono";
 import type { Bindings } from "../types";
 
 /**
- * Local dev only: a D1Database whose writes go to production first, then to the
+ * Local dev only, when the admin picked "This computer + live site": a D1Database whose writes go to production first, then to the
  * local DB, so saving an event or place on your machine also saves it on the live
  * site (same id in both). Reads come from the local DB.
  *
@@ -30,9 +30,12 @@ function mirrored(local: D1Database, prod: D1Database): D1Database {
 const isLocalhost = (url: string) => ["localhost", "127.0.0.1"].includes(new URL(url).hostname);
 
 /**
- * The DB for the events/places repos: mirrored to production when running on
- * your machine (`wrangler dev`, PROD_DB bound remotely), plain `DB` everywhere else.
+ * The DB for the events/places repos. On your machine (`wrangler dev`, PROD_DB bound
+ * remotely) the local admin chooses per request with the `X-Write-Target` header:
+ * "both" = also save to production (mirrored), anything else / missing = this computer
+ * only. On the live Worker it is always plain `DB` (production).
  */
 export function contentDb(c: Context<{ Bindings: Bindings }>): D1Database {
-  return c.env.PROD_DB && isLocalhost(c.req.url) ? mirrored(c.env.DB, c.env.PROD_DB) : c.env.DB;
+  const both = c.req.header("X-Write-Target") === "both";
+  return c.env.PROD_DB && isLocalhost(c.req.url) && both ? mirrored(c.env.DB, c.env.PROD_DB) : c.env.DB;
 }
