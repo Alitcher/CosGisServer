@@ -43,7 +43,11 @@ export async function record(
   const real = changes.filter((ch) => JSON.stringify(ch.before) !== JSON.stringify(ch.after));
   if (!real.length) return;
   const group = (c.req.header("X-History-Group") ?? "").slice(0, 64) || crypto.randomUUID();
-  const name = (c.req.header("X-History-Label") ?? "").slice(0, 200) || label;
+  // The client URI-encodes the label: fetch headers can only carry Latin-1 characters.
+  const rawName = c.req.header("X-History-Label") ?? "";
+  let decoded = rawName;
+  try { decoded = decodeURIComponent(rawName); } catch { /* old client sent it raw */ }
+  const name = decoded.slice(0, 200) || label;
   const actor = actorOf(c);
   for (const ch of real) {
     await db

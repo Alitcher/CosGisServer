@@ -22,9 +22,13 @@ export function imageController() {
       (await c.env.DB.prepare("SELECT 1 FROM places WHERE photos LIKE ? LIMIT 1").bind(`%${JSON.stringify(url).slice(1, -1)}%`).first());
     if (!known) return c.json({ error: "Not an event or place picture" }, 404);
 
-    const res = await fetch(url, { headers: { Accept: "image/*" }, cf: { cacheTtl: 86400, cacheEverything: true } });
+    // Some picture servers (e.g. Espoo) refuse requests that name no browser / program.
+    const res = await fetch(url, {
+      headers: { Accept: "image/*", "User-Agent": "Mozilla/5.0 (compatible; CosOverHere picture relay)" },
+      cf: { cacheTtl: 86400, cacheEverything: true },
+    });
     const type = res.headers.get("Content-Type") ?? "";
-    if (!res.ok || !type.startsWith("image/")) return c.json({ error: "Picture not available" }, 502);
+    if (!res.ok || !type.startsWith("image/")) return c.json({ error: "Picture not available", status: res.status, type }, 502);
     const body = await res.arrayBuffer();
     if (body.byteLength > MAX_BYTES) return c.json({ error: "Picture too big" }, 413);
     return new Response(body, {
