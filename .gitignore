@@ -10,6 +10,9 @@ build/
 .dev.vars
 .dev.vars.*
 
+# Database exports (contain real submissions)
+backups/
+
 # Env & secrets
 .env
 .env.*
